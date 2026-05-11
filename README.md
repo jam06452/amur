@@ -1,3 +1,4 @@
+
 # Amur
 
 Simple OAuth for Plug apps.
@@ -60,7 +61,29 @@ if your success or failure callbacks use session or flash helpers. Also set
 `alias: false` on the scope that forwards `Amur.Router`, otherwise Phoenix will
 rewrite it as `YourAppWeb.Amur.Router`.
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/amur>.
+3. Add an Auth Controller to handle the results of the authentication process
+```elixir
+defmodule  MyAppWeb.AuthController  do
+	import  Plug.Conn
 
+	def  on_success(conn, provider, user) do
+		IO.inspect(user, label: "AUTH SUCCESS - #{provider}")
+		conn
+			|> put_session(:flash_info, "Logged in as #{user.email}")
+			|> put_resp_header("location", "/")
+			|> send_resp(302, "Redirecting...")
+			|> halt()
+		end
+
+  
+
+	def  on_failure(conn, reason) do
+		IO.inspect(reason, label: "AUTH FAILURE")
+		conn
+		|> put_session(:flash_error, "Authentication failed")
+		|> put_resp_header("location", "/")
+		|> send_resp(302, "Redirecting...")
+		|> halt()
+	end
+end
+```
