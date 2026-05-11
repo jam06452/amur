@@ -4,14 +4,14 @@ defmodule Amur.ControllerTest do
   defmodule Router do
     use Plug.Router
 
-    plug :match
-    plug :dispatch
+    plug(:match)
+    plug(:dispatch)
 
     get "/" do
       send_resp(conn, 200, "home")
     end
 
-    forward "/auth", to: Amur.Router
+    forward("/auth", to: Amur.Router)
   end
 
   test "default_failure redirects to /" do

@@ -10,12 +10,17 @@ defmodule Amur.Router do
       |> fetch_session()
 
     case {conn.method, conn.path_info} do
-      {"GET", ["logout"]} -> Amur.Controller.logout(conn, %{})
-      {"GET", [provider]} -> Amur.Controller.request(conn, %{"provider" => provider})
+      {"GET", ["logout"]} ->
+        Amur.Controller.logout(conn, %{})
+
+      {"GET", [provider]} ->
+        Amur.Controller.request(conn, %{"provider" => provider})
+
       {"GET", [provider, "callback"]} ->
         Amur.Controller.callback(conn, Map.put(conn.params, "provider", provider))
 
-      _ -> conn
+      _ ->
+        conn
     end
   end
 end
