@@ -25,14 +25,15 @@ end
 
 ```elixir
 config :amur,
+  base_url: "http://localhost:4000"
   providers: [
     github: [
       client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
       client_secret: System.fetch_env!("GITHUB_CLIENT_SECRET")
     ]
   ],
-  on_success: &MyApp.Accounts.find_or_create/3,
-  on_failure: &MyApp.Accounts.auth_failed/2
+  on_success: &MyApp.AuthController.on_success/3,
+  on_failure: &MyApp.AuthController.on_failure/2
 ```
 
 2. Mount the router in your application router.
@@ -41,10 +42,9 @@ config :amur,
 defmodule MyAppWeb.Router do
   use MyAppWeb, :router
 
-  scope "/", MyAppWeb, alias: false do
+  scope "/auth" do
     pipe_through :browser
-
-    forward "/auth", Amur.Router
+    forward "/", Amur.Router
   end
 end
 ```
@@ -63,27 +63,28 @@ rewrite it as `YourAppWeb.Amur.Router`.
 
 3. Add an Auth Controller to handle the results of the authentication process
 ```elixir
-defmodule  MyAppWeb.AuthController  do
-	import  Plug.Conn
+defmodule Amurtest.AuthController do
+  import Plug.Conn
+  import Phoenix.Controller
 
-	def  on_success(conn, provider, user) do
-		IO.inspect(user, label: "AUTH SUCCESS - #{provider}")
-		conn
-			|> put_session(:flash_info, "Logged in as #{user.email}")
-			|> put_resp_header("location", "/")
-			|> send_resp(302, "Redirecting...")
-			|> halt()
-		end
+  def on_success(conn, provider, user) do
+    IO.inspect(user, label: "AUTH SUCCESS - #{provider}")
 
-  
+    conn
+    |> put_flash(:info, "Logged in as #{user.email}")
+    |> put_resp_header("location", "/")
+    |> send_resp(302, "Redirecting...")
+    |> halt()
+  end
 
-	def  on_failure(conn, reason) do
-		IO.inspect(reason, label: "AUTH FAILURE")
-		conn
-		|> put_session(:flash_error, "Authentication failed")
-		|> put_resp_header("location", "/")
-		|> send_resp(302, "Redirecting...")
-		|> halt()
-	end
+  def on_failure(conn, reason) do
+    IO.inspect(reason, label: "AUTH FAILURE")
+
+    conn
+    |> put_flash(:info, "Authentication Error")
+    |> put_resp_header("location", "/")
+    |> send_resp(302, "Redirecting...")
+    |> halt()
+  end
 end
 ```
