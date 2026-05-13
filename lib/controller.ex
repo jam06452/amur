@@ -26,7 +26,7 @@ defmodule Amur.Controller do
         |> Map.put(:provider, provider)
 
       on_success = Application.fetch_env!(:amur, :on_success)
-      on_success.(conn, provider, normalized)
+      on_success.(conn, normalized)
     else
       {:error, reason} -> handle_failure(conn, reason)
     end
