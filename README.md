@@ -10,7 +10,7 @@ by adding `amur` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:amur, "~> 0.1.0"}
+    {:amur, "~> 0.1.1"}
   ]
 end
 ```
