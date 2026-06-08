@@ -1,13 +1,9 @@
-
 # Amur
-
 Simple OAuth for Plug apps.
-
 Amur gives you a small OAuth callback flow and provider normalization layer.
-It is now Plug-based and does not require Phoenix.
+It is Plug-based and does not require Phoenix.
 
 ## Installation
-
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 by adding `amur` to your list of dependencies in `mix.exs`:
 
@@ -25,14 +21,14 @@ end
 
 ```elixir
 config :amur,
-  base_url: "http://localhost:4000"
+  base_url: "http://localhost:4000",
   providers: [
     github: [
       client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
       client_secret: System.fetch_env!("GITHUB_CLIENT_SECRET")
     ]
   ],
-  on_success: &MyApp.AuthController.on_success/3,
+  on_success: &MyApp.AuthController.on_success/2,
   on_failure: &MyApp.AuthController.on_failure/2
 ```
 
@@ -42,34 +38,32 @@ config :amur,
 defmodule MyAppWeb.Router do
   use MyAppWeb, :router
 
-  scope "/auth" do
+  scope "/auth", alias: false do
     pipe_through :browser
     forward "/", Amur.Router
   end
 end
 ```
 
-`forward "/auth", Amur.Router` mounts the auth endpoints under `/auth`:
+`forward "/", Amur.Router` inside a `/auth` scope mounts the auth endpoints under `/auth`:
+- `GET /auth/:provider` — starts the OAuth flow.
+- `GET /auth/:provider/callback` — handles the provider callback.
+- `GET /auth/logout` — clears Amur's stored session params.
 
-- `GET /auth/:provider` starts the OAuth flow.
-- `GET /auth/:provider/callback` handles the provider callback.
-- `GET /auth/logout` clears Amur's stored session params.
+If you want a different base path, change the scope path. Keep the forward inside a pipeline
+that runs `fetch_session` and `fetch_flash` if your callbacks use session or flash helpers.
+The `alias: false` on the scope is required, otherwise Phoenix will rewrite it as
+`YourAppWeb.Amur.Router`.
 
-If you want a different base path, change the path you forward to. In Phoenix,
-keep the forward inside a pipeline that runs `fetch_session` and `fetch_flash`
-if your success or failure callbacks use session or flash helpers. Also set
-`alias: false` on the scope that forwards `Amur.Router`, otherwise Phoenix will
-rewrite it as `YourAppWeb.Amur.Router`.
+3. Add an Auth Controller to handle the results of the authentication process.
 
-3. Add an Auth Controller to handle the results of the authentication process
 ```elixir
-defmodule Amurtest.AuthController do
+defmodule MyApp.AuthController do
   import Plug.Conn
   import Phoenix.Controller
 
-  def on_success(conn, provider, user) do
-    IO.inspect(user, label: "AUTH SUCCESS - #{provider}")
-
+  def on_success(conn, user) do
+    IO.inspect(user, label: "AUTH SUCCESS - #{user.provider}")
     conn
     |> put_flash(:info, "Logged in as #{user.email}")
     |> put_resp_header("location", "/")
@@ -79,9 +73,8 @@ defmodule Amurtest.AuthController do
 
   def on_failure(conn, reason) do
     IO.inspect(reason, label: "AUTH FAILURE")
-
     conn
-    |> put_flash(:info, "Authentication Error")
+    |> put_flash(:error, "Authentication Error")
     |> put_resp_header("location", "/")
     |> send_resp(302, "Redirecting...")
     |> halt()
