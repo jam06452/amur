@@ -5,7 +5,8 @@ defmodule Amur.Config do
 
   @built_ins %{
     github: Amur.Providers.GitHub,
-    google: Amur.Providers.Google
+    google: Amur.Providers.Google,
+    hackclub: Amur.Providers.HackClub
   }
 
   def resolve(provider) when is_binary(provider) do
