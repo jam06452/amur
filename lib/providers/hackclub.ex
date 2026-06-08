@@ -18,11 +18,12 @@ defmodule Amur.Providers.HackClub do
   end
 
   def normalize_user(user) do
+    identity = user["identity"]
+
     %{
-      uid: user["id"],
-      email: user["email"],
-      name: user["name"],
-      avatar: user["avatar"]
+      uid: identity["id"],
+      email: identity["primary_email"],
+      name: "#{identity["first_name"]} #{identity["last_name"]}"
     }
   end
 end
