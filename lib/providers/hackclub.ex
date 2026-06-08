@@ -23,7 +23,8 @@ defmodule Amur.Providers.HackClub do
     %{
       uid: identity["id"],
       email: identity["primary_email"],
-      name: "#{identity["first_name"]} #{identity["last_name"]}"
+      name: "#{identity["first_name"]} #{identity["last_name"]}",
+      slack_id: identity["slack_id"]
     }
   end
 end
