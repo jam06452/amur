@@ -13,7 +13,7 @@ defmodule Amur.Providers.HackClub do
       token_url: "/oauth/token",
       user_url: "/api/v1/me",
       auth_method: :client_secret_post,
-      authorization_params: [scope: "email slack_id"]
+      authorization_params: [scope: "email slack_id name"]
     ]
   end
 
