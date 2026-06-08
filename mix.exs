@@ -18,8 +18,8 @@ defmodule Amur.MixProject do
 
   defp deps do
     [
-      {:assent, "~> 0.2"},
-      {:plug, "~> 1.14"},
+      {:assent, "~> 0.3"},
+      {:plug, "~> 1.19"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
