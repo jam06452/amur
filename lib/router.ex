@@ -3,10 +3,15 @@ defmodule Amur.Router do
 
   def init(opts), do: opts
 
-  def call(conn, _opts) do
+  def call(conn, opts) do
     conn =
-      conn
-      |> fetch_query_params()
+      if Keyword.get(opts, :fetch_session, true) do
+        conn
+        |> fetch_query_params()
+        |> fetch_session()
+      else
+        fetch_query_params(conn)
+      end
 
     case {conn.method, conn.path_info} do
       {"GET", ["logout"]} ->
