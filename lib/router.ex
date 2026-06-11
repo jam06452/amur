@@ -7,7 +7,6 @@ defmodule Amur.Router do
     conn =
       conn
       |> fetch_query_params()
-      |> fetch_session()
 
     case {conn.method, conn.path_info} do
       {"GET", ["logout"]} ->
