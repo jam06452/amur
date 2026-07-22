@@ -4,9 +4,30 @@ defmodule Amur.Config do
   """
 
   @built_ins %{
+    apple: Amur.Providers.Apple,
+    auth0: Amur.Providers.Auth0,
+    azure_ad: Amur.Providers.AzureAD,
+    basecamp: Amur.Providers.Basecamp,
+    bitbucket: Amur.Providers.Bitbucket,
+    digital_ocean: Amur.Providers.DigitalOcean,
+    discord: Amur.Providers.Discord,
+    facebook: Amur.Providers.Facebook,
     github: Amur.Providers.GitHub,
+    gitlab: Amur.Providers.Gitlab,
     google: Amur.Providers.Google,
-    hackclub: Amur.Providers.HackClub
+    hackclub: Amur.Providers.HackClub,
+    instagram: Amur.Providers.Instagram,
+    line: Amur.Providers.LINE,
+    linkedin: Amur.Providers.Linkedin,
+    slack: Amur.Providers.Slack,
+    spotify: Amur.Providers.Spotify,
+    strava: Amur.Providers.Strava,
+    stripe: Amur.Providers.Stripe,
+    telegram: Amur.Providers.Telegram,
+    twitch: Amur.Providers.Twitch,
+    twitter: Amur.Providers.Twitter,
+    vk: Amur.Providers.VK,
+    zitadel: Amur.Providers.Zitadel
   }
 
   def resolve(provider) when is_binary(provider) do
