@@ -1,25 +1,25 @@
 # Amur
-Simple OAuth for Plug apps.
-Amur gives you a small OAuth callback flow and provider normalization layer.
-It is Plug-based and does not require Phoenix.
+
+Simple OAuth for Plug apps. Amur gives you a small OAuth callback flow and provider normalization layer. It is Plug-based and does not require Phoenix.
 
 ## Installation
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `amur` to your list of dependencies in `mix.exs`:
+
+Add `amur` to your dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:amur, "~> 0.1.1"}
+    {:amur, "~> 0.2"}
   ]
 end
 ```
 
 ## Setup
 
-1. Add the dependency and configure your provider credentials.
+### 1. Configure your OAuth providers
 
 ```elixir
+# config/runtime.exs
 config :amur,
   base_url: "http://localhost:4000",
   providers: [
@@ -28,56 +28,149 @@ config :amur,
       client_secret: System.fetch_env!("GITHUB_CLIENT_SECRET")
     ]
   ],
-  on_success: &MyApp.AuthController.on_success/2,
-  on_failure: &MyApp.AuthController.on_failure/2
+  on_success: &MyAppWeb.AuthController.on_success/2,
+  on_failure: &MyAppWeb.AuthController.on_failure/2
 ```
 
-2. Mount the router in your application router.
+| Key | Required | Description |
+|---|---|---|
+| `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
+| `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
+| `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, normalized_user)`. |
+| `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
+
+### 2. Mount the router
 
 ```elixir
-defmodule MyAppWeb.Router do
-  use MyAppWeb, :router
-
-  scope "/auth", alias: false do
-    pipe_through :browser
-    forward "/", Amur.Router
-  end
+# Phoenix
+scope "/auth", alias: false do
+  pipe_through :browser
+  forward "/", Amur.Router
 end
 ```
 
-`forward "/", Amur.Router` inside a `/auth` scope mounts the auth endpoints under `/auth`:
-- `GET /auth/:provider` — starts the OAuth flow.
-- `GET /auth/:provider/callback` — handles the provider callback.
-- `GET /auth/logout` — clears Amur's stored session params.
+The `alias: false` on the scope is required — without it Phoenix rewrites `Amur.Router` as `YourAppWeb.Amur.Router`.
 
-If you want a different base path, change the scope path. Keep the forward inside a pipeline
-that runs `fetch_session` and `fetch_flash` if your callbacks use session or flash helpers.
-The `alias: false` on the scope is required, otherwise Phoenix will rewrite it as
-`YourAppWeb.Amur.Router`.
+Inside a browser pipeline, session and flash helpers are available for your callbacks.
 
-3. Add an Auth Controller to handle the results of the authentication process.
+Amur works with `Plug.Router` too:
 
 ```elixir
-defmodule MyApp.AuthController do
+# Plug
+forward "/auth", to: Amur.Router
+```
+
+The router exposes three endpoints:
+
+| Endpoint | Description |
+|---|---|
+| `GET /auth/:provider` | Initiates the OAuth flow |
+| `GET /auth/:provider/callback` | Handles the provider callback |
+| `GET /auth/logout` | Clears Amur's stored session params |
+
+### 3. Add an auth controller
+
+```elixir
+defmodule MyAppWeb.AuthController do
   import Plug.Conn
   import Phoenix.Controller
 
   def on_success(conn, user) do
-    IO.inspect(user, label: "AUTH SUCCESS - #{user.provider}")
     conn
     |> put_flash(:info, "Logged in as #{user.email}")
-    |> put_resp_header("location", "/")
-    |> send_resp(302, "Redirecting...")
+    |> redirect(to: "/")
     |> halt()
   end
 
   def on_failure(conn, reason) do
-    IO.inspect(reason, label: "AUTH FAILURE")
     conn
-    |> put_flash(:error, "Authentication Error")
-    |> put_resp_header("location", "/")
-    |> send_resp(302, "Redirecting...")
+    |> put_flash(:error, "Authentication failed")
+    |> redirect(to: "/")
     |> halt()
   end
 end
 ```
+
+The normalized `user` map has the following shape:
+
+```elixir
+%{
+  provider: "github",      # the provider atom as a string
+  uid: "12345",            # provider-specific user ID
+  email: "user@example.com",
+  name: "username",
+  avatar: "https://..."
+}
+```
+
+Different providers may return different fields. See each provider module's `normalize_user/1` for the exact shape.
+
+### 4. (Optional) Clear the session on logout
+
+```elixir
+# In your own logout handler
+Amur.logout(conn)
+```
+
+This deletes the `:amur_session_params` key from the session. The `GET /auth/logout` endpoint calls this automatically and redirects to `/`.
+
+## Built-in providers
+
+Amur ships with support for the following providers:
+
+Apple, Auth0, Azure AD, Basecamp, Bitbucket, DigitalOcean, Discord, Facebook, GitHub, GitLab, Google, Hack Club, Instagram, LINE, LinkedIn, Slack, Spotify, Strava, Stripe, Telegram, Twitch, Twitter (X), VK, Zitadel
+
+Each is a thin wrapper around the corresponding [Assent](https://github.com/pow-auth/assent) strategy.
+
+## Custom providers
+
+You can define your own provider module using the `Amur.Provider` behaviour:
+
+```elixir
+defmodule MyApp.Auth.CustomProvider do
+  use Amur.Provider
+
+  def strategy, do: Assent.Strategy.OAuth2
+
+  def base_config do
+    [
+      base_url: "https://api.example.com",
+      authorization_endpoint: "/oauth/authorize",
+      token_endpoint: "/oauth/token",
+      user_endpoint: "/user"
+    ]
+  end
+
+  def normalize_user(user) do
+    %{uid: user["id"], email: user["email"], name: user["name"]}
+  end
+end
+```
+
+Then reference it in your config:
+
+```elixir
+config :amur,
+  providers: [
+    my_provider: MyApp.Auth.CustomProvider
+  ]
+```
+
+## Scopes
+
+To request specific OAuth scopes, pass them in your provider config:
+
+```elixir
+config :amur,
+  providers: [
+    github: [
+      client_id: "..",
+      client_secret: "..",
+      scopes: "user:email,read:org"
+    ]
+  ]
+```
+
+## License
+
+MIT

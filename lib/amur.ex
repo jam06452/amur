@@ -5,20 +5,20 @@ defmodule Amur do
   ## Setup
 
   ```elixir
-
   # mix.exs
-  {:amur, "~> 0.1"}
+  {:amur, "~> 0.2"}
 
   # config/runtime.exs
   config :amur,
+    base_url: "http://localhost:4000",
     providers: [
       github: [
         client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
         client_secret: System.fetch_env!("GITHUB_CLIENT_SECRET")
       ]
     ],
-    on_success: &MyApp.Accounts.find_or_create/3,
-    on_failure: &MyApp.Accounts.auth_failed/2
+    on_success: &MyAppWeb.AuthController.on_success/2,
+    on_failure: &MyAppWeb.AuthController.on_failure/2
 
   # router.ex
   forward "/auth", Amur.Router
@@ -30,11 +30,14 @@ defmodule Amur do
   on the scope that contains the forward so Phoenix does not rewrite the module
   name. It works with both `Phoenix.Router` and `Plug.Router`. It exposes:
 
-  - `GET /auth/:provider` to start the OAuth flow
-  - `GET /auth/:provider/callback` to handle the callback
-  - `GET /auth/logout` to clear Amur's stored session params
+  - `GET /auth/:provider` - start the OAuth flow
+  - `GET /auth/:provider/callback`- handle the provider callback
+  - `GET /auth/logout` - clear Amur's stored session params
 
-  The helper below only clears Amur's stored OAuth session params.
+  ## Logout helper
+
+  `Amur.logout/1` clears Amur's stored OAuth session params from the conn.
+  Use it in your own logout handler, or rely on the built-in `GET /auth/logout` endpoint.
   """
   def logout(conn) do
     conn
