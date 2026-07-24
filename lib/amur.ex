@@ -67,6 +67,29 @@ defmodule Amur do
 
   `Amur.logout/1` clears Amur's stored OAuth session params from the conn.
   Use it in your own logout handler, or rely on the built-in `GET /auth/logout` endpoint.
+
+  ## `on_success` payload
+
+  `on_success/2` receives a map with two keys:
+
+    * `:user` - the normalized user map (provider-specific fields plus `:provider`)
+    * `:token` - the OAuth token returned by the strategy
+
+  Pattern-match only what you need. If you don't need the token, ignore it:
+
+      def on_success(conn, %{user: user}) do
+        conn
+        |> put_flash(:info, "Logged in as \#{user[:email]}")
+        |> redirect(to: "/")
+      end
+
+  If you need it (e.g. to call the provider's API on behalf of the user), bind it:
+
+      def on_success(conn, %{user: user, token: token}) do
+        conn
+        |> put_session(:access_token, token["access_token"])
+        |> redirect(to: "/")
+      end
   """
   def logout(conn) do
     conn

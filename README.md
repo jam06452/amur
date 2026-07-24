@@ -100,7 +100,7 @@ defmodule MyAppWeb.AuthController do
   import Plug.Conn
   import Phoenix.Controller
 
-  def on_success(conn, user) do
+  def on_success(conn, %{user: user}) do
     conn
     |> put_flash(:info, "Logged in as #{user.email}")
     |> redirect(to: "/")
@@ -129,6 +129,19 @@ The normalized `user` map has the following shape:
 ```
 
 Different providers may return different fields. See each provider module's `normalize_user/1` for the exact shape.
+
+`on_success/2` also receives the OAuth `token` in the same map. Bind it only
+when you need it (for example, to call the provider's API on the user's
+behalf); otherwise ignore it by pattern-matching just `:user`:
+
+```elixir
+def on_success(conn, %{user: user, token: token}) do
+  conn
+  |> put_session(:access_token, token["access_token"])
+  |> redirect(to: "/")
+  |> halt()
+end
+```
 
 ### 4. (Optional) Clear the session on logout
 
