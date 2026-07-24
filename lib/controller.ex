@@ -19,14 +19,14 @@ defmodule Amur.Controller do
     with {:ok, {module, config}} <- Amur.Config.resolve(provider),
          strategy = Keyword.fetch!(config, :strategy),
          config = Keyword.put(config, :session_params, session_params),
-         {:ok, %{user: user, token: _token}} <- strategy.callback(config, params) do
+         {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
       normalized =
         user
         |> module.normalize_user()
         |> Map.put(:provider, provider)
 
       on_success = Application.fetch_env!(:amur, :on_success)
-      on_success.(conn, normalized)
+      on_success.(conn, %{user: normalized, token: token})
     else
       {:error, reason} -> handle_failure(conn, reason)
     end

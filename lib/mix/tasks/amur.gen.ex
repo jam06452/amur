@@ -113,7 +113,7 @@ defmodule Mix.Tasks.Amur.Gen do
     defmodule #{web_mod}.AuthController do
       use #{web_mod}, :controller
 
-      def on_success(conn, user) do
+      def on_success(conn, %{user: user}) do
         conn
         |> put_flash(:info, "Logged in as \#{user[:email]}")
         |> redirect(to: "/")
@@ -135,7 +135,7 @@ defmodule Mix.Tasks.Amur.Gen do
     defmodule #{web_mod}.AuthController do
       import Plug.Conn
 
-      def on_success(conn, _user) do
+      def on_success(conn, %{user: _user}) do
         redirect(conn, "/")
       end
 
