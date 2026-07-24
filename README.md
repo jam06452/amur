@@ -14,6 +14,31 @@ def deps do
 end
 ```
 
+  ## Quickstart with `mix amur.gen`
+
+  Run the generator from your project root to scaffold the controller, mount the
+  router, and write the config block automatically:
+
+  ```bash
+  mix amur.gen
+  ```
+
+  It inspects your `mix.exs` to detect the app name, derives the web module
+  (`AppWeb` when a Phoenix-style `lib/<app>_web` layout is present, otherwise
+  `App`), and writes the boilerplate for you — no prompts. It defaults to the
+  `github` provider.
+
+  Options:
+
+  | Flag | Description |
+  |---|---|
+  | `--provider <name>` | Provider atom used in the generated config (default: `github`) |
+  | `--app <name>` | Override the detected app name  |
+  | `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
+
+  ```bash
+  mix amur.gen --provider google
+  ```
 ## Setup
 
 ### 1. Configure your OAuth providers
