@@ -33,11 +33,13 @@ end
   | Flag | Description |
   |---|---|
   | `--provider <name>` | Provider atom used in the generated config (default: `github`) |
+  | `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
   | `--app <name>` | Override the detected app name  |
   | `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
 
   ```bash
   mix amur.gen --provider google
+  mix amur.gen --all
   ```
 ## Setup
 

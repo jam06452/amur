@@ -23,6 +23,16 @@ defmodule Amur.ConfigTest do
     assert {:error, :unknown_provider} = Amur.Config.resolve("nope")
   end
 
+  test "built_in_providers/0 returns all built-in provider atoms sorted" do
+    providers = Amur.Config.built_in_providers()
+
+    assert :apple in providers
+    assert :github in providers
+    assert :zitadel in providers
+    assert providers == Enum.sort(providers)
+    assert length(providers) == 24
+  end
+
   test "resolve/1 returns unknown for unconfigured atom" do
     Application.put_env(:amur, :providers, [])
     assert {:error, :unknown_provider} = Amur.Config.resolve(:github)
