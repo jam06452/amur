@@ -61,7 +61,10 @@ defmodule Amur.Config do
     base_url = Application.get_env(:amur, :base_url, "")
     credentials = Keyword.get(configured_providers, provider, [])
 
-    {scopes, credentials} = Keyword.pop(credentials, :scopes)
+    {scopes, credentials} =
+      if is_list(credentials),
+        do: Keyword.pop(credentials, :scopes),
+        else: {nil, []}
 
     config =
       module.base_config()
