@@ -61,7 +61,7 @@ config :amur,
 |---|---|---|
 | `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
-| `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, normalized_user)`. |
+| `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
 
 ### 2. Mount the router
@@ -91,7 +91,10 @@ The router exposes three endpoints:
 |---|---|
 | `GET /auth/:provider` | Initiates the OAuth flow |
 | `GET /auth/:provider/callback` | Handles the provider callback |
-| `GET /auth/logout` | Clears Amur's stored session params |
+
+Amur stores the OAuth handshake params (the `state`, PKCE verifier, ...) in
+the session for the duration of the flow and clears them automatically once
+the callback has been handled — no manual cleanup needed.
 
 ### 3. Add an auth controller
 
@@ -143,14 +146,9 @@ def on_success(conn, %{user: user, token: token}) do
 end
 ```
 
-### 4. (Optional) Clear the session on logout
-
-```elixir
-# In your own logout handler
-Amur.logout(conn)
-```
-
-This deletes the `:amur_session_params` key from the session. The `GET /auth/logout` endpoint calls this automatically and redirects to `/`.
+The token map's keys depend on the provider's flow: OAuth 2.0 providers use
+`token["access_token"]`, while OAuth 1.0 (Twitter) uses `token["oauth_token"]`
+and `token["oauth_token_secret"]`.
 
 ## Built-in providers
 
