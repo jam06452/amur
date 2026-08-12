@@ -6,7 +6,7 @@ defmodule Amur do
 
   ```elixir
   # mix.exs
-  {:amur, "~> 0.2.2"}
+  {:amur, "~> 0.2.3"}
   ```
 
   ## Quickstart with `mix amur.gen`
@@ -61,12 +61,9 @@ defmodule Amur do
 
   - `GET /auth/:provider` - start the OAuth flow
   - `GET /auth/:provider/callback`- handle the provider callback
-  - `GET /auth/logout` - clear Amur's stored session params
 
-  ## Logout helper
-
-  `Amur.logout/1` clears Amur's stored OAuth session params from the conn.
-  Use it in your own logout handler, or rely on the built-in `GET /auth/logout` endpoint.
+  The OAuth handshake params are kept in the session for the duration of the
+  flow and are automatically cleared once the callback has been handled.
 
   ## `on_success` payload
 
@@ -90,9 +87,9 @@ defmodule Amur do
         |> put_session(:access_token, token["access_token"])
         |> redirect(to: "/")
       end
+
+  The token's keys depend on the provider's flow: OAuth 2.0 providers (GitHub,
+  Google, ...) use `token["access_token"]`, while OAuth 1.0 (Twitter) uses
+  `token["oauth_token"]` and `token["oauth_token_secret"]`.
   """
-  def logout(conn) do
-    conn
-    |> Plug.Conn.delete_session(:amur_session_params)
-  end
 end

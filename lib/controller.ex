@@ -15,6 +15,7 @@ defmodule Amur.Controller do
 
   def callback(conn, %{"provider" => provider} = params) do
     session_params = get_session(conn, :amur_session_params)
+    conn = delete_session(conn, :amur_session_params)
 
     with {:ok, {module, config}} <- Amur.Config.resolve(provider),
          strategy = Keyword.fetch!(config, :strategy),
@@ -30,12 +31,6 @@ defmodule Amur.Controller do
     else
       {:error, reason} -> handle_failure(conn, reason)
     end
-  end
-
-  def logout(conn, _params) do
-    conn
-    |> Amur.logout()
-    |> redirect("/")
   end
 
   defp handle_failure(conn, reason) do
