@@ -140,15 +140,31 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_controller(igniter, web_module, phoenix?) do
-    controller_module = Module.concat([web_module, AuthController])
-    target_path = Igniter.Project.Module.proper_location(igniter, controller_module)
+    target_path = controller_path(web_module, phoenix?)
+    igniter = prevent_controller_relocation(igniter, target_path)
 
     if Igniter.exists?(igniter, target_path) do
       Igniter.add_notice(igniter, "[skip] #{target_path} already exists; leaving unchanged.")
     else
       contents = controller_contents(web_module, phoenix?)
-      Igniter.create_new_file(igniter, target_path, contents)
+      Igniter.create_new_file(igniter, target_path, contents, format?: false)
     end
+  end
+
+  defp controller_path(web_module, _phoenix?) do
+    web_root = web_module |> Module.split() |> hd() |> Macro.underscore()
+    "lib/#{web_root}/controllers/auth_controller.ex"
+  end
+
+  defp prevent_controller_relocation(igniter, target_path) do
+    igniter_exs = igniter.assigns[:igniter_exs] || %{}
+    dont_move_files = Keyword.get(igniter_exs, :dont_move_files, [])
+
+    Igniter.assign(
+      igniter,
+      :igniter_exs,
+      Keyword.put(igniter_exs, :dont_move_files, Enum.uniq([target_path | dont_move_files]))
+    )
   end
 
   defp controller_contents(web_module, true) do

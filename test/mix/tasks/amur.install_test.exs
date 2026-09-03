@@ -40,6 +40,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
       |> Map.keys()
       |> Enum.find(&String.ends_with?(&1, "auth_controller.ex"))
 
+    assert auth_controller_path == "lib/sample_web/controllers/auth_controller.ex"
     auth_controller = igniter.assigns[:test_files][auth_controller_path]
     assert auth_controller =~ "defmodule SampleWeb.AuthController do"
     assert auth_controller =~ "on_success(conn, %{user: user})"
@@ -71,6 +72,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
       |> Map.keys()
       |> Enum.find(&String.ends_with?(&1, "auth_controller.ex"))
 
+    assert auth_controller_path == "lib/test_web/controllers/auth_controller.ex"
     auth_controller = igniter.assigns[:test_files][auth_controller_path]
     assert auth_controller =~ "defmodule TestWeb.AuthController do"
   end
