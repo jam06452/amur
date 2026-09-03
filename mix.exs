@@ -20,6 +20,7 @@ defmodule Amur.MixProject do
     [
       {:assent, "~> 0.3"},
       {:plug, "~> 1.19"},
+      {:igniter, "~> 0.8", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
