@@ -330,17 +330,40 @@ defmodule Mix.Tasks.Amur.Install do
     Igniter.update_elixir_file(igniter, "config/runtime.exs", fn zipper ->
       source = zipper |> Sourceror.Zipper.topmost() |> Sourceror.Zipper.node()
 
-      if source |> Sourceror.to_string() |> String.contains?("AMUR_DOTENV_LOADER") do
+      if dotenv_loader_present?(source) do
         {:ok, zipper}
       else
-        {:ok, Igniter.Code.Common.add_code(zipper, dotenv_loader(), placement: :before)}
+        case Igniter.Code.Function.move_to_function_call_in_current_scope(
+               zipper,
+               :import,
+               1,
+               fn call ->
+                 Igniter.Code.Function.argument_matches_predicate?(
+                   call,
+                   0,
+                   &Igniter.Code.Common.nodes_equal?(&1, Config)
+                 )
+               end
+             ) do
+          {:ok, import_zipper} ->
+            {:ok, Igniter.Code.Common.add_code(import_zipper, dotenv_loader())}
+
+          :error ->
+            {:ok, Igniter.Code.Common.add_code(zipper, dotenv_loader(), placement: :before)}
+        end
       end
     end)
   end
 
+  defp dotenv_loader_present?(source) do
+    rendered_source = Sourceror.to_string(source)
+
+    String.contains?(rendered_source, "File.exists?(\".env\")") and
+      String.contains?(rendered_source, "System.put_env(key, val)")
+  end
+
   defp dotenv_loader do
     """
-    # AMUR_DOTENV_LOADER
     if Mix.env() != :test and File.exists?(".env") do
       ".env"
       |> File.read!()
