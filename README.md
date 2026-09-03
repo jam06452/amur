@@ -9,36 +9,57 @@ Add `amur` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:amur, "~> 0.2"}
+    {:amur, "~> 0.3"}
   ]
 end
 ```
 
-  ## Quickstart with `mix amur.gen`
+### Automatic installation with Igniter
 
-  Run the generator from your project root to scaffold the controller, mount the
-  router, and write the config block automatically:
+If your project uses [Igniter](https://hexdocs.pm/igniter), install Amur and
+generate the controller, router mount, and runtime configuration in one step:
 
-  ```bash
-  mix amur.gen
-  ```
+```bash
+mix igniter.install amur
+```
 
-  It inspects your `mix.exs` to detect the app name, derives the web module
-  (`AppWeb` when a Phoenix-style `lib/<app>_web` layout is present, otherwise
-  `App`), and writes the boilerplate for you — no prompts. It defaults to the
-  `github` provider.
+The installer supports Phoenix applications and standalone `Plug.Router`
+projects. It detects the application and web module, preserves existing files,
+and defaults to the `github` provider. Use `--provider <name>` to configure a
+single provider or `--all` to configure every built-in provider:
 
-  Options:
+```bash
+mix igniter.install amur --provider google
+mix igniter.install amur --all
+```
 
-  | Flag | Description |
-  |---|---|
-  | `--provider <name>` | Provider atom used in the generated config (default: `github`) |
-  | `--app <name>` | Override the detected app name  |
-  | `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
+### Quickstart with `mix amur.gen`
 
-  ```bash
-  mix amur.gen --provider google
-  ```
+Run the generator from your project root to scaffold the controller, mount the
+router, and write the config block automatically:
+
+```bash
+mix amur.gen
+```
+
+It inspects your `mix.exs` to detect the app name, derives the web module
+(`AppWeb` when a Phoenix-style `lib/<app>_web` layout is present, otherwise
+`App`), and writes the boilerplate for you — no prompts. It defaults to the
+`github` provider.
+
+Options:
+
+| Flag | Description |
+|---|---|
+| `--provider <name>` | Provider atom used in the generated config (default: `github`) |
+| `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
+| `--app <name>` | Override the detected app name |
+| `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
+
+```bash
+mix amur.gen --provider google
+mix amur.gen --all
+```
 ## Setup
 
 ### 1. Configure your OAuth providers
@@ -46,7 +67,7 @@ end
 ```elixir
 # config/runtime.exs
 config :amur,
-  base_url: "http://localhost:4000",
+  base_url: System.get_env("BASE_URL") || "http://localhost:4000",
   providers: [
     github: [
       client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
@@ -74,7 +95,7 @@ scope "/auth", alias: false do
 end
 ```
 
-The `alias: false` on the scope is required — without it Phoenix rewrites `Amur.Router` as `YourAppWeb.Amur.Router`.
+The `alias: false` on the scope is required, without it Phoenix rewrites `Amur.Router` as `YourAppWeb.Amur.Router`.
 
 Inside a browser pipeline, session and flash helpers are available for your callbacks.
 
@@ -94,7 +115,7 @@ The router exposes three endpoints:
 
 Amur stores the OAuth handshake params (the `state`, PKCE verifier, ...) in
 the session for the duration of the flow and clears them automatically once
-the callback has been handled — no manual cleanup needed.
+the callback has been handled, no manual cleanup needed.
 
 ### 3. Add an auth controller
 

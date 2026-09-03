@@ -6,7 +6,26 @@ defmodule Amur do
 
   ```elixir
   # mix.exs
-  {:amur, "~> 0.2.3"}
+  {:amur, "~> 0.3"}
+  ```
+
+  ## Automatic installation with Igniter
+
+  If your project uses [Igniter](https://hexdocs.pm/igniter), install Amur and
+  generate the controller, router mount, and runtime configuration in one step:
+
+  ```bash
+  mix igniter.install amur
+  ```
+
+  The installer supports Phoenix applications and standalone `Plug.Router`
+  projects. It detects the application and web module, preserves existing files,
+  and defaults to the `github` provider. Use `--provider <name>` to configure a
+  single provider or `--all` to configure every built-in provider:
+
+  ```bash
+  mix igniter.install amur --provider google
+  mix igniter.install amur --all
   ```
 
   ## Quickstart with `mix amur.gen`
@@ -28,18 +47,20 @@ defmodule Amur do
   | Flag | Description |
   |---|---|
   | `--provider <name>` | Provider atom used in the generated config (default: `github`) |
+  | `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
   | `--app <name>` | Override the detected app name  |
   | `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
 
   ```bash
   mix amur.gen --provider google
+  mix amur.gen --all
   ```
 
   ## Manual setup
   ```elixir
   # config/runtime.exs
   config :amur,
-    base_url: "http://localhost:4000",
+    base_url: System.get_env("BASE_URL") || "http://localhost:4000",
     providers: [
       github: [
         client_id: System.fetch_env!("GITHUB_CLIENT_ID"),

@@ -4,7 +4,7 @@ defmodule Amur.MixProject do
   def project do
     [
       app: :amur,
-      version: "0.2.4",
+      version: "0.3.0",
       elixir: "~> 1.15",
       description: "Simple OAuth for Plug apps",
       deps: deps(),
@@ -20,6 +20,7 @@ defmodule Amur.MixProject do
     [
       {:assent, "~> 0.3"},
       {:plug, "~> 1.19"},
+      {:igniter, "~> 0.8", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]

@@ -20,6 +20,8 @@ defmodule Mix.Tasks.Amur.Gen do
   ## Options
 
     * `--provider` - provider atom used in the generated config (default: `github`)
+    * `--all` - generate config for every built-in provider
+      (cannot be combined with `--provider`)
     * `--app` - override the detected OTP app (rarely needed)
     * `--no-config`, `--no-router`, `--no-controller` - skip individual pieces
 
@@ -27,6 +29,7 @@ defmodule Mix.Tasks.Amur.Gen do
 
       mix amur.gen
       mix amur.gen --provider google
+      mix amur.gen --all
   """
 
   use Mix.Task
@@ -38,35 +41,48 @@ defmodule Mix.Tasks.Amur.Gen do
         strict: [
           provider: :string,
           app: :string,
+          all: :boolean,
           no_config: :boolean,
           no_router: :boolean,
           no_controller: :boolean
         ]
       )
 
+    if opts[:all] && opts[:provider] do
+      Mix.raise(
+        "--provider and --all cannot be combined. " <>
+          "Use --all to configure every built-in provider, " <>
+          "or --provider <name> for a single one."
+      )
+    end
+
     app = detect_app(opts)
     app_mod = app |> Atom.to_string() |> Macro.camelize()
-    provider = (opts[:provider] || "github") |> String.to_atom()
+
+    providers =
+      if opts[:all] do
+        Amur.Config.built_in_providers()
+      else
+        [(opts[:provider] || "github") |> String.to_atom()]
+      end
+
     phoenix? = phoenix?(app)
     web_mod = if phoenix?, do: "#{app_mod}Web", else: app_mod
 
     Mix.shell().info("Detected OTP app: #{inspect(app)} (module #{app_mod})")
     Mix.shell().info("Web module: #{web_mod} (#{if phoenix?, do: "Phoenix", else: "Plug"})")
-    Mix.shell().info("Default provider: #{provider}")
+
+    if opts[:all] do
+      Mix.shell().info("Providers: all #{length(providers)} built-in providers")
+    else
+      Mix.shell().info("Default provider: #{hd(providers)}")
+    end
 
     unless opts[:no_controller], do: gen_controller(web_mod, app, phoenix?)
     unless opts[:no_router], do: gen_router(app, phoenix?)
-    unless opts[:no_config], do: gen_config(web_mod, provider)
+    unless opts[:no_config], do: gen_config(web_mod, providers)
 
-    Mix.shell().info("")
-    Mix.shell().info("Amur boilerplate generated. Next steps:")
-
-    Mix.shell().info(
-      "  1. Set #{provider |> Atom.to_string() |> String.upcase()}_CLIENT_ID and _CLIENT_SECRET env vars."
-    )
-
-    Mix.shell().info("  2. Add your callback logic to #{web_mod}.AuthController.on_success/2.")
-    Mix.shell().info("  3. Run your app and visit /auth/#{provider}.")
+    next_steps(web_mod, providers)
     :ok
   end
 
@@ -247,7 +263,7 @@ defmodule Mix.Tasks.Amur.Gen do
 
   # runtime config
 
-  defp gen_config(web_mod, provider) do
+  defp gen_config(web_mod, providers) do
     path = "config/runtime.exs"
     File.mkdir_p!("config")
     contents = if File.exists?(path), do: File.read!(path), else: ""
@@ -255,7 +271,7 @@ defmodule Mix.Tasks.Amur.Gen do
     if String.contains?(contents, "config :amur,") do
       Mix.shell().info("[skip] #{path} already has a config :amur block")
     else
-      block = config_block(web_mod, provider)
+      block = config_block(web_mod, providers)
 
       new_contents =
         if String.trim(contents) == "" do
@@ -269,20 +285,57 @@ defmodule Mix.Tasks.Amur.Gen do
     end
   end
 
-  defp config_block(web_mod, provider) do
-    env_prefix = provider |> Atom.to_string() |> String.upcase()
+  defp config_block(web_mod, providers) do
+    providers_block =
+      providers
+      |> Enum.map_join(",\n", fn provider ->
+        env_prefix = provider |> Atom.to_string() |> String.upcase()
+
+        "    #{provider}: [\n" <>
+          "      client_id: System.fetch_env!(\"#{env_prefix}_CLIENT_ID\"),\n" <>
+          "      client_secret: System.fetch_env!(\"#{env_prefix}_CLIENT_SECRET\")\n" <>
+          "    ]"
+      end)
 
     """
     config :amur,
       base_url: "http://localhost:4000",
       providers: [
-        #{provider}: [
-          client_id: System.fetch_env!("#{env_prefix}_CLIENT_ID"),
-          client_secret: System.fetch_env!("#{env_prefix}_CLIENT_SECRET")
-        ]
+    #{providers_block}
       ],
       on_success: &#{web_mod}.AuthController.on_success/2,
       on_failure: &#{web_mod}.AuthController.on_failure/2
     """
+  end
+
+  # next steps
+
+  defp next_steps(web_mod, [provider]) do
+    env_prefix = provider |> Atom.to_string() |> String.upcase()
+
+    Mix.shell().info("")
+    Mix.shell().info("Amur boilerplate generated. Next steps:")
+    Mix.shell().info("  1. Set #{env_prefix}_CLIENT_ID and #{env_prefix}_CLIENT_SECRET env vars.")
+    Mix.shell().info("  2. Add your callback logic to #{web_mod}.AuthController.on_success/2.")
+    Mix.shell().info("  3. Run your app and visit /auth/#{provider}.")
+  end
+
+  defp next_steps(web_mod, providers) do
+    env_prefixes =
+      providers
+      |> Enum.map_join(", ", fn provider -> provider |> Atom.to_string() |> String.upcase() end)
+
+    Mix.shell().info("")
+    Mix.shell().info("Amur boilerplate generated. Next steps:")
+
+    Mix.shell().info(
+      "  1. Set the #{env_prefixes}_CLIENT_ID and _CLIENT_SECRET env vars for each provider you plan to use."
+    )
+
+    Mix.shell().info("  2. Add your callback logic to #{web_mod}.AuthController.on_success/2.")
+
+    Mix.shell().info(
+      "  3. Run your app and visit /auth/<provider> (e.g. /auth/#{hd(providers)})."
+    )
   end
 end

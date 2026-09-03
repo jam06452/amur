@@ -30,6 +30,15 @@ defmodule Amur.Config do
     zitadel: Amur.Providers.Zitadel
   }
 
+  @doc """
+  Returns the atoms of all built-in providers, sorted alphabetically.
+  """
+  def built_in_providers do
+    @built_ins
+    |> Map.keys()
+    |> Enum.sort()
+  end
+
   def resolve(provider) when is_binary(provider) do
     provider
     |> String.to_existing_atom()
