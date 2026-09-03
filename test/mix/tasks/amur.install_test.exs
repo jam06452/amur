@@ -56,9 +56,10 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "SampleWeb.AuthController.on_success/2"
     assert runtime =~ "System.get_env(\"BASE_URL\") || \"http://localhost:4000\""
     refute runtime =~ "Endpoint.url()"
-    assert runtime =~ "AMUR_DOTENV_LOADER"
+    refute runtime =~ "AMUR_DOTENV_LOADER"
     assert runtime =~ "Mix.env() != :test"
     assert runtime =~ "System.put_env(key, val)"
+    assert runtime =~ ~r/import Config\n\nif Mix\.env\(\) != :test/
     assert {:ok, _} = Code.string_to_quoted(runtime)
   end
 
