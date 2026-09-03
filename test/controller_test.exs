@@ -15,7 +15,9 @@ defmodule Amur.ControllerTest do
   test "callback clears amur session params" do
     conn =
       Plug.Test.conn(:get, "/")
-      |> Plug.Test.init_test_session(%{amur_session_params: %{code_verifier: "abc"}})
+      |> Plug.Test.init_test_session(%{
+        amur_session_params: %{state: "state", code_verifier: "abc"}
+      })
 
     conn = Amur.Controller.callback(conn, %{"provider" => "github"})
 

@@ -20,6 +20,7 @@ defmodule Amur.Controller do
     with {:ok, {module, config}} <- Amur.Config.resolve(provider),
          strategy = Keyword.fetch!(config, :strategy),
          config = Keyword.put(config, :session_params, session_params),
+         :ok <- validate_session_params(session_params),
          {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
       normalized =
         user
@@ -37,6 +38,20 @@ defmodule Amur.Controller do
     on_failure = Application.get_env(:amur, :on_failure, &Amur.Controller.default_failure/2)
     on_failure.(conn, reason)
   end
+
+  defp validate_session_params(%{state: state}) when is_binary(state) and state != "" do
+    :ok
+  end
+
+  defp validate_session_params(session_params) when is_list(session_params) do
+    if Keyword.get(session_params, :state) not in [nil, ""] do
+      :ok
+    else
+      {:error, :invalid_session_params}
+    end
+  end
+
+  defp validate_session_params(_session_params), do: {:error, :invalid_session_params}
 
   def default_failure(conn, _reason) do
     conn
