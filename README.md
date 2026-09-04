@@ -1,39 +1,79 @@
 # Amur
 
-Simple OAuth for Plug apps. Amur gives you a small OAuth callback flow and provider normalization layer. It is Plug-based and does not require Phoenix.
+Simple OAuth for Plug applications.
 
-## Installation
+Amur gives Plug applications a small, provider agnostic OAuth flow without requiring Phoenix. It handles the OAuth handshake, state/PKCE, provider specific configuration, and user normalization. All of this while leaving authentication and user data management up to your application.
 
-Add `amur` to your dependencies in `mix.exs`:
+- Plug-native, works with Phoenix or standalone Plug
+- State & PKCE, handled automatically
+- Stateless by default, temporary OAuth state is cleared from session after the callback
+- 24 built-in providers
+- Normalized users, the same data format across providers
+- Custom providers, add providers that aren't built in
+- Igniter & Mix generators, get started in under 60 seconds
+- Built on Assent, OAuth strategies are provided by Assent
+
+## Why Amur?
+
+Amur sits between your router and your OAuth provider:
+
+```text
+Your application
+       ↓
+  Amur.Router
+       ↓
+ OAuth handshake
+       ↓
+   State / PKCE
+       ↓
+Provider strategy
+       ↓
+User normalization
+       ↓
+Your on_success/2
+       ↓
+Your authentication system
+```
+
+Amur doesn't create users, manage sessions or impose any authentication systems on your application. It gives you the OAuth result and you decide what happens next.
+
+## Quick Start - Igniter (Recommended)
 
 ```elixir
 def deps do
   [
-    {:amur, "~> 0.3"}
+    {:igniter, "~> 0.8"}
   ]
 end
 ```
 
-### Automatic installation with Igniter
-
-If your project uses [Igniter](https://hexdocs.pm/igniter), install Amur and
-generate the controller, router mount, and runtime configuration in one step:
-
 ```bash
-mix igniter.install amur
+# Defaults to GitHub
+mix igniter.install amur --provider <Your Provider>
 ```
 
-The installer supports Phoenix applications and standalone `Plug.Router`
-projects. It detects the application and web module, preserves existing files,
-and defaults to the `github` provider. Use `--provider <name>` to configure a
-single provider or `--all` to configure every built-in provider:
+Options:
 
-```bash
-mix igniter.install amur --provider google
-mix igniter.install amur --all
+| Flag | Description |
+|---|---|
+| `--provider <name>` | Provider atom used in the generated config (default: `github`) |
+| `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
+| `--app <name>` | Override the detected app name |
+| `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
+
+Add your secrets into a .env:
+
+```
+GITHUB_CLIENT_ID=<ID>
+GITHUB_CLIENT_SECRET=<SECRET>
 ```
 
-### Quickstart with `mix amur.gen`
+That's it for the basic OAuth flow.
+
+Amur handles the OAuth handshake, state/PKCE, callback, and user normalization. Edit the generated AuthController to decide how your application creates users, establishes sessions, and redirects authenticated users.
+
+
+### Quickstart with `mix amur.gen` (Not Recommended)
 
 Run the generator from your project root to scaffold the controller, mount the
 router, and write the config block automatically:
@@ -47,20 +87,11 @@ It inspects your `mix.exs` to detect the app name, derives the web module
 `App`), and writes the boilerplate for you — no prompts. It defaults to the
 `github` provider.
 
-Options:
-
-| Flag | Description |
-|---|---|
-| `--provider <name>` | Provider atom used in the generated config (default: `github`) |
-| `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
-| `--app <name>` | Override the detected app name |
-| `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
-
 ```bash
 mix amur.gen --provider google
 mix amur.gen --all
 ```
-## Setup
+## Indepth Setup
 
 ### 1. Configure your OAuth providers
 
