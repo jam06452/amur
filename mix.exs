@@ -19,10 +19,11 @@ defmodule Amur.MixProject do
   defp deps do
     [
       {:assent, "~> 0.3"},
-      {:plug, "~> 1.19"},
+      {:plug, ">= 0.0.0"},
       {:igniter, "~> 0.8", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:mix_audit, "~> 2.1.5", only: [:dev, :test], runtime: false}
     ]
   end
 
