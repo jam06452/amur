@@ -7,6 +7,11 @@ defmodule Amur.Callback do
   token, while the failure callback receives the reason the flow failed.
   """
 
-  @callback on_success(Plug.Conn.t(), %{user: map(), token: map()}) :: Plug.Conn.t()
+  @type context :: %{
+          required(:user) => Amur.User.t(),
+          optional(atom()) => term()
+        }
+
+  @callback on_success(Plug.Conn.t(), context()) :: Plug.Conn.t()
   @callback on_failure(Plug.Conn.t(), term()) :: Plug.Conn.t()
 end

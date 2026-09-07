@@ -242,6 +242,10 @@ The normalized `user` map has the following shape:
 }
 ```
 
+The public `Amur.User.t()` type represents this map. The `:uid`, `:email`,
+`:name`, and `:avatar` fields are optional because providers may not return
+them, and provider-specific fields may also be present.
+
 Different providers may return different fields. See each provider module's `normalize_user/1` for the exact shape.
 
 `on_success/2` also receives the OAuth `token` in the same map. Bind it only
