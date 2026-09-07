@@ -187,6 +187,9 @@ defmodule Mix.Tasks.Amur.Install do
     defmodule #{inspect(web_module)}.AuthController do
       use #{inspect(web_module)}, :controller
 
+      @behaviour Amur.Callback
+
+      @impl true
       def on_success(conn, %{user: user}) do
         conn
         |> put_flash(:info, "Logged in as \#{user[:email]}")
@@ -194,6 +197,7 @@ defmodule Mix.Tasks.Amur.Install do
         |> halt()
       end
 
+      @impl true
       def on_failure(conn, _reason) do
         conn
         |> put_flash(:error, "Authentication failed.")
@@ -209,10 +213,14 @@ defmodule Mix.Tasks.Amur.Install do
     defmodule #{inspect(web_module)}.AuthController do
       import Plug.Conn
 
+      @behaviour Amur.Callback
+
+      @impl true
       def on_success(conn, %{user: _user}) do
         redirect(conn, "/")
       end
 
+      @impl true
       def on_failure(conn, _reason) do
         redirect(conn, "/")
       end

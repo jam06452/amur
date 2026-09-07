@@ -202,11 +202,17 @@ the callback has been handled, no manual cleanup needed.
 
 ### 3. Add an auth controller
 
+Implement the `Amur.Callback` behaviour so both OAuth result handlers are
+present and their arguments are type checked:
+
 ```elixir
 defmodule MyAppWeb.AuthController do
+  @behaviour Amur.Callback
+
   import Plug.Conn
   import Phoenix.Controller
 
+  @impl true
   def on_success(conn, %{user: user}) do
     conn
     |> put_flash(:info, "Logged in as #{user.email}")
@@ -214,6 +220,7 @@ defmodule MyAppWeb.AuthController do
     |> halt()
   end
 
+  @impl true
   def on_failure(conn, reason) do
     conn
     |> put_flash(:error, "Authentication failed")
