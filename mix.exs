@@ -17,6 +17,7 @@ defmodule Amur.MixProject do
     [
       main: "readme",
       extras: ["README.md"],
+      assets: %{"assets" => "assets"},
       groups_for_modules: [
         Providers: [
           ~r/^Amur\.Providers(\.|$)/

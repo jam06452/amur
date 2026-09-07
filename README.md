@@ -18,7 +18,9 @@ Amur gives Plug applications a small, provider agnostic OAuth flow without requi
 
 Amur sits between your router and your OAuth provider:
 
-![Flow](assets/flow.svg)
+<p align="center">
+  <img alt="Amur OAuth flow" src="https://raw.githubusercontent.com/jam06452/amur/main/assets/flow.svg" width="202">
+</p>
 
 Amur doesn't create users, manage sessions or impose any authentication systems on your application. It gives you the OAuth result and you decide what happens next.
 
