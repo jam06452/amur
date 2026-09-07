@@ -43,7 +43,9 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert auth_controller_path == "lib/sample_web/controllers/auth_controller.ex"
     auth_controller = igniter.assigns[:test_files][auth_controller_path]
     assert auth_controller =~ "defmodule SampleWeb.AuthController do"
+    assert auth_controller =~ "@behaviour Amur.Callback"
     assert auth_controller =~ "on_success(conn, %{user: user})"
+    assert auth_controller =~ "@impl true"
     assert auth_controller =~ "user[:email]"
 
     router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
