@@ -28,6 +28,13 @@ defmodule Amur.Provider do
   @callback base_config() :: keyword()
   @callback normalize_user(map()) :: map()
 
+  @doc """
+  Marks the using module as an `Amur.Provider` implementation.
+
+  This macro registers the behaviour callbacks without adding runtime
+  functions, allowing the module to define its provider-specific strategy,
+  configuration, and user normalization.
+  """
   defmacro __using__(_) do
     quote do
       @behaviour Amur.Provider

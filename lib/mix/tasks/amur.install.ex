@@ -4,9 +4,17 @@ defmodule Mix.Tasks.Amur.Install do
   Generates the boilerplate needed to start using Amur in your application.
 
   Supports both Phoenix applications and standalone Plug.Router setups.
+  Unlike the legacy `mix amur.gen` task, this Igniter task edits project
+  source and configuration through Igniter's AST-aware operations.
   """
   use Igniter.Mix.Task
 
+  @doc """
+  Describes the options accepted by `mix igniter.install amur`.
+
+  The returned schema lets Igniter expose provider, application, and
+  component-generation options consistently with the task implementation.
+  """
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do
     %Igniter.Mix.Task.Info{
@@ -25,6 +33,13 @@ defmodule Mix.Tasks.Amur.Install do
     }
   end
 
+  @doc """
+  Applies Amur's generated controller, router, and runtime configuration.
+
+  Existing files and configuration are preserved where possible. The
+  `--provider` and `--all` options are mutually exclusive, and generated
+  callbacks are wired only when a controller is requested.
+  """
   @impl Igniter.Mix.Task
   def igniter(igniter) do
     opts = igniter.args.options

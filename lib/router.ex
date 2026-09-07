@@ -12,8 +12,21 @@ defmodule Amur.Router do
 
   import Plug.Conn
 
+  @doc """
+  Initializes the router with the options supplied by Plug.
+
+  Amur does not currently require router options, so they are returned
+  unchanged for Plug's supervision and compilation conventions.
+  """
   def init(opts), do: opts
 
+  @doc """
+  Fetches request state and dispatches the supported OAuth routes.
+
+  Query parameters and the session are fetched before dispatch so the
+  controller can build authorization requests and validate callbacks. Unknown
+  methods or paths pass through unchanged.
+  """
   def call(conn, _opts) do
     conn =
       conn

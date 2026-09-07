@@ -1,6 +1,18 @@
 defmodule Amur.Config do
   @moduledoc """
-  Configuration resolver for OAuth providers.
+  Resolves provider names into the modules and configuration used by Amur.
+
+  Provider configuration is read from the `:amur` application environment:
+
+    * `:providers` maps provider names to credential keyword lists or custom
+      provider modules.
+    * `:base_url` supplies the base used to build a provider's callback URI.
+
+  Built-in provider modules are registered in `@built_ins`. Custom modules
+  take precedence when the same provider name is configured explicitly. The
+  returned configuration combines the provider's defaults with application
+  credentials and includes the strategy and redirect URI required by
+  `Amur.Controller`.
   """
 
   @built_ins %{
@@ -39,6 +51,14 @@ defmodule Amur.Config do
     |> Enum.sort()
   end
 
+  @doc """
+  Resolves a provider name supplied by a router or application.
+
+  Binary names are converted only to existing atoms, preventing arbitrary
+  request parameters from growing the VM atom table. Atom names are resolved
+  against configured custom modules and built-in providers. Unknown names
+  return `{:error, :unknown_provider}`.
+  """
   def resolve(provider) when is_binary(provider) do
     provider
     |> String.to_existing_atom()
@@ -65,6 +85,8 @@ defmodule Amur.Config do
     end
   end
 
+  # Build the final Assent configuration only after the provider has been
+  # resolved, so custom and built-in providers follow the same code path.
   defp build_config(module, provider) do
     configured_providers = Application.get_env(:amur, :providers, [])
     base_url = Application.get_env(:amur, :base_url, "")
@@ -85,8 +107,11 @@ defmodule Amur.Config do
     {:ok, {module, config}}
   end
 
+  # Leave provider defaults untouched when no application-level scopes were
+  # configured.
   defp merge_scopes(config, nil), do: config
 
+  # Replace an existing scope while preserving other authorization parameters.
   defp merge_scopes(config, scopes) do
     Keyword.update(config, :authorization_params, [scope: scopes], fn params ->
       Keyword.put(params, :scope, scopes)

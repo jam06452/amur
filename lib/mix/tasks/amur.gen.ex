@@ -34,6 +34,13 @@ defmodule Mix.Tasks.Amur.Gen do
 
   use Mix.Task
 
+  @doc """
+  Generates Amur boilerplate in the current Mix project.
+
+  The task detects the application and whether it uses Phoenix or
+  `Plug.Router`, then conditionally generates an auth controller, router mount,
+  and runtime configuration according to the command-line options.
+  """
   @impl Mix.Task
   def run(argv) do
     {opts, _, _} =
@@ -86,6 +93,7 @@ defmodule Mix.Tasks.Amur.Gen do
     :ok
   end
 
+  # Prefer an explicit app name, then the current Mix project's OTP app.
   defp detect_app(opts) do
     case opts[:app] do
       nil ->
@@ -102,12 +110,13 @@ defmodule Mix.Tasks.Amur.Gen do
     end
   end
 
+  # Phoenix projects conventionally keep web code in `<app>_web`.
   defp phoenix?(app) do
     web_dir = "lib/#{app}_web"
     File.dir?(web_dir) or File.exists?("#{web_dir}.ex")
   end
 
-  # auth controller
+  # Auth controller
 
   defp gen_controller(web_mod, app, phoenix?) do
     path = controller_path(app, phoenix?)
@@ -169,7 +178,7 @@ defmodule Mix.Tasks.Amur.Gen do
     """
   end
 
-  # router
+  # Router
 
   defp gen_router(app, phoenix?) do
     case find_router(app, phoenix?) do
@@ -261,7 +270,7 @@ defmodule Mix.Tasks.Amur.Gen do
     end)
   end
 
-  # runtime config
+  # Runtime config
 
   defp gen_config(web_mod, providers) do
     path = "config/runtime.exs"
@@ -308,7 +317,7 @@ defmodule Mix.Tasks.Amur.Gen do
     """
   end
 
-  # next steps
+  # Next steps
 
   defp next_steps(web_mod, [provider]) do
     env_prefix = provider |> Atom.to_string() |> String.upcase()
