@@ -5,8 +5,10 @@ defmodule Amur.Providers.Basecamp do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Basecamp
 
+  @impl true
   def base_config do
     [
       base_url: "https://launchpad.37signals.com",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Basecamp do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

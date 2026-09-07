@@ -5,8 +5,10 @@ defmodule Amur.Providers.LINE do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.LINE
 
+  @impl true
   def base_config do
     [
       base_url: "https://access.line.me",
@@ -15,6 +17,7 @@ defmodule Amur.Providers.LINE do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

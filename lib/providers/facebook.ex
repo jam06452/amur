@@ -5,8 +5,10 @@ defmodule Amur.Providers.Facebook do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Facebook
 
+  @impl true
   def base_config do
     [
       base_url: "https://graph.facebook.com/v4.0",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Facebook do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

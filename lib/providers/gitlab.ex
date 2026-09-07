@@ -5,8 +5,10 @@ defmodule Amur.Providers.Gitlab do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Gitlab
 
+  @impl true
   def base_config do
     [
       base_url: "https://gitlab.com",
@@ -15,6 +17,7 @@ defmodule Amur.Providers.Gitlab do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

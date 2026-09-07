@@ -5,8 +5,10 @@ defmodule Amur.Providers.AzureAD do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.AzureAD
 
+  @impl true
   def base_config do
     [
       authorization_params: [scope: "email profile", response_mode: "form_post"],
@@ -14,6 +16,7 @@ defmodule Amur.Providers.AzureAD do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

@@ -5,8 +5,10 @@ defmodule Amur.Providers.Bitbucket do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Bitbucket
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.bitbucket.org/2.0",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Bitbucket do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

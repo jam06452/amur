@@ -5,8 +5,10 @@ defmodule Amur.Providers.Strava do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Strava
 
+  @impl true
   def base_config do
     [
       base_url: "https://www.strava.com/api/v3",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Strava do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

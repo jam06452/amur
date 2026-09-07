@@ -5,8 +5,10 @@ defmodule Amur.Providers.Slack do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Slack
 
+  @impl true
   def base_config do
     [
       base_url: "https://slack.com",
@@ -15,6 +17,7 @@ defmodule Amur.Providers.Slack do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

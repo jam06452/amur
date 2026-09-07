@@ -4,12 +4,15 @@ defmodule Amur.ConfigTest do
   defmodule CustomProvider do
     use Amur.Provider
 
+    @impl true
     def strategy, do: Assent.Strategy.OAuth2
 
+    @impl true
     def base_config do
       [base_url: "https://custom.example.com", authorization_params: [scope: "email"]]
     end
 
+    @impl true
     def normalize_user(user), do: %{uid: user["id"]}
   end
 

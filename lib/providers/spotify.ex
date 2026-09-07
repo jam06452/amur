@@ -5,8 +5,10 @@ defmodule Amur.Providers.Spotify do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Spotify
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.spotify.com/v1",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Spotify do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

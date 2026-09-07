@@ -5,8 +5,10 @@ defmodule Amur.Providers.Twitter do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Twitter
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.twitter.com",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Twitter do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

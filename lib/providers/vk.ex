@@ -5,8 +5,10 @@ defmodule Amur.Providers.VK do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.VK
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.vk.com",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.VK do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

@@ -5,12 +5,15 @@ defmodule Amur.Providers.GitHub do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Github
 
+  @impl true
   def base_config do
     [authorization_params: [scope: "user:email"]]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

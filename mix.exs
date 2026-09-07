@@ -8,7 +8,20 @@ defmodule Amur.MixProject do
       elixir: "~> 1.15",
       description: "Simple OAuth for Plug apps",
       deps: deps(),
-      package: package()
+      package: package(),
+      docs: docs()
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md"],
+      groups_for_modules: [
+        Providers: [
+          ~r/^Amur\.Providers(\.|$)/
+        ]
+      ]
     ]
   end
 
