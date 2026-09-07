@@ -36,6 +36,10 @@ end
 # Defaults to GitHub
 mix igniter.install amur --provider <Your Provider>
 ```
+```bash
+# Configure multiple providers
+mix igniter.install amur --provider github,google
+```
 
 Options:
 
@@ -141,7 +145,7 @@ config :amur,
   ]
 ```
 
-## In-depth Setup, (Not Required if used igniter)
+## Manual Setup
 
 This is what igniter sets up for you automatically.
 
