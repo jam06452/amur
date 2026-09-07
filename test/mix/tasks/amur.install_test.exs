@@ -98,6 +98,16 @@ defmodule Mix.Tasks.Amur.InstallTest do
     end
   end
 
+  test "generates config for a comma-separated provider list" do
+    igniter = apply_install(["--app", "sample", "--provider", "github, google", "--yes"])
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+
+    assert runtime =~ "github: ["
+    assert runtime =~ "google: ["
+    assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
+    assert runtime =~ "System.fetch_env!(\"GOOGLE_CLIENT_ID\")"
+  end
+
   test "does not require a browser pipeline" do
     igniter =
       apply_install(

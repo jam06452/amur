@@ -38,7 +38,8 @@ defmodule Mix.Tasks.Amur.Install do
 
   Existing files and configuration are preserved where possible. The
   `--provider` and `--all` options are mutually exclusive, and generated
-  callbacks are wired only when a controller is requested.
+  callbacks are wired only when a controller is requested. Multiple providers
+  can be passed to `--provider` as a comma-separated list.
   """
   @impl Igniter.Mix.Task
   def igniter(igniter) do
@@ -48,7 +49,7 @@ defmodule Mix.Tasks.Amur.Install do
       Mix.raise(
         "--provider and --all cannot be combined. " <>
           "Use --all to configure every built-in provider, " <>
-          "or --provider <name> for a single one."
+          "or --provider <name>[,<name>...] for one or more providers."
       )
     end
 
@@ -102,7 +103,11 @@ defmodule Mix.Tasks.Amur.Install do
         Mix.raise("Amur.Config.built_in_providers/0 is unavailable; cannot resolve --all.")
 
       not is_nil(opts[:provider]) ->
-        [parse_provider!(opts[:provider])]
+        opts[:provider]
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.map(&parse_provider!/1)
+        |> Enum.uniq()
 
       true ->
         [:github]
