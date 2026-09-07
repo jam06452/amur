@@ -5,8 +5,10 @@ defmodule Amur.Providers.Apple do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Apple
 
+  @impl true
   def base_config do
     [
       base_url: "https://appleid.apple.com",
@@ -15,6 +17,7 @@ defmodule Amur.Providers.Apple do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

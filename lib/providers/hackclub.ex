@@ -4,8 +4,10 @@ defmodule Amur.Providers.HackClub do
   """
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.OAuth2
 
+  @impl true
   def base_config do
     [
       base_url: "https://auth.hackclub.com",
@@ -17,6 +19,7 @@ defmodule Amur.Providers.HackClub do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     identity = user["identity"]
 

@@ -8,12 +8,15 @@ defmodule Amur.Providers.Telegram do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Telegram
 
+  @impl true
   def base_config do
     []
   end
 
+  @impl true
   def normalize_user(user) do
     given_name = user["given_name"]
     family_name = user["family_name"]

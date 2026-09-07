@@ -218,8 +218,10 @@ You can define your own provider module using the `Amur.Provider` behaviour:
 defmodule MyApp.Auth.CustomProvider do
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.OAuth2
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.example.com",
@@ -229,6 +231,7 @@ defmodule MyApp.Auth.CustomProvider do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{uid: user["id"], email: user["email"], name: user["name"]}
   end

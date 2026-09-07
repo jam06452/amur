@@ -5,8 +5,10 @@ defmodule Amur.Providers.DigitalOcean do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.DigitalOcean
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.digitalocean.com",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.DigitalOcean do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

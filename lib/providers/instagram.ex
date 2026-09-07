@@ -5,8 +5,10 @@ defmodule Amur.Providers.Instagram do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Instagram
 
+  @impl true
   def base_config do
     [
       base_url: "https://graph.instagram.com",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Instagram do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

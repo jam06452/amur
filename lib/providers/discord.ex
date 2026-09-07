@@ -5,8 +5,10 @@ defmodule Amur.Providers.Discord do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Discord
 
+  @impl true
   def base_config do
     [
       base_url: "https://discordapp.com/api",
@@ -18,6 +20,7 @@ defmodule Amur.Providers.Discord do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

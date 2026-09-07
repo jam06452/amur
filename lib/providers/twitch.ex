@@ -5,8 +5,10 @@ defmodule Amur.Providers.Twitch do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Twitch
 
+  @impl true
   def base_config do
     [
       base_url: "https://id.twitch.tv/oauth2",
@@ -19,6 +21,7 @@ defmodule Amur.Providers.Twitch do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

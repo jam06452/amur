@@ -5,8 +5,10 @@ defmodule Amur.Providers.Linkedin do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Linkedin
 
+  @impl true
   def base_config do
     [
       base_url: "https://www.linkedin.com/oauth",
@@ -15,6 +17,7 @@ defmodule Amur.Providers.Linkedin do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

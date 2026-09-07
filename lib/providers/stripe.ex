@@ -5,8 +5,10 @@ defmodule Amur.Providers.Stripe do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Stripe
 
+  @impl true
   def base_config do
     [
       base_url: "https://api.stripe.com/",
@@ -17,6 +19,7 @@ defmodule Amur.Providers.Stripe do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

@@ -5,12 +5,15 @@ defmodule Amur.Providers.Google do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Google
 
+  @impl true
   def base_config do
     [authorization_params: [scope: "email profile"]]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],

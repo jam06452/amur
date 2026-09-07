@@ -5,8 +5,10 @@ defmodule Amur.Providers.Auth0 do
 
   use Amur.Provider
 
+  @impl true
   def strategy, do: Assent.Strategy.Auth0
 
+  @impl true
   def base_config do
     [
       authorization_params: [scope: "email profile"],
@@ -14,6 +16,7 @@ defmodule Amur.Providers.Auth0 do
     ]
   end
 
+  @impl true
   def normalize_user(user) do
     %{
       uid: user["sub"],
