@@ -7,6 +7,8 @@ defmodule Amur.MixProject do
       version: "0.3.3",
       elixir: "~> 1.15",
       description: "Simple OAuth for Plug apps",
+      aliases: aliases(),
+      dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
       package: package(),
       docs: docs()
@@ -30,14 +32,21 @@ defmodule Amur.MixProject do
     [extra_applications: [:logger]]
   end
 
+  defp aliases do
+    [
+      ci: ["credo --strict", "format --check-formatted", "deps.audit", "dialyzer"]
+    ]
+  end
+
   defp deps do
     [
       {:assent, "~> 0.3"},
       {:plug, ">= 0.0.0"},
-      {:igniter, "~> 0.8", optional: true},
+      {:igniter, "~> 0.8.4", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
-      {:mix_audit, "~> 2.1.5", only: [:dev, :test], runtime: false}
+      {:mix_audit, "~> 2.1.5", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
