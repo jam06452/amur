@@ -87,10 +87,10 @@ defmodule Amur.Controller do
   end
 
   defp validate_session_params(session_params) when is_list(session_params) do
-    if Keyword.get(session_params, :state) not in [nil, ""] do
-      :ok
-    else
+    if Keyword.get(session_params, :state) in [nil, ""] do
       {:error, :invalid_session_params}
+    else
+      :ok
     end
   end
 
