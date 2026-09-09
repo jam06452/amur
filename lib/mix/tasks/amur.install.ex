@@ -91,10 +91,7 @@ defmodule Mix.Tasks.Amur.Install do
     if opts[:app] do
       {igniter, Module.concat([Macro.camelize(to_string(app_name)) <> "Web"])}
     else
-      case Phoenix.web_module(igniter) do
-        {igniter, mod} when is_atom(mod) -> {igniter, mod}
-        mod when is_atom(mod) -> {igniter, mod}
-      end
+      {igniter, Phoenix.web_module(igniter)}
     end
   end
 
