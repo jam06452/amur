@@ -9,6 +9,14 @@ defmodule Mix.Tasks.Amur.Install do
   """
   use Igniter.Mix.Task
 
+  alias Igniter.Code.{Common, Function}
+  alias Igniter.Code.Module, as: CodeModule
+  alias Igniter.Libs.Phoenix
+  alias Igniter.Project.Application
+  alias Igniter.Project.Config, as: ProjectConfig
+  alias Igniter.Project.Module, as: ProjectModule
+  alias Sourceror.Zipper
+
   @doc """
   Describes the options accepted by `mix igniter.install amur`.
 
@@ -55,7 +63,7 @@ defmodule Mix.Tasks.Amur.Install do
 
     app_name =
       case opts[:app] do
-        nil -> Igniter.Project.Application.app_name(igniter)
+        nil -> Application.app_name(igniter)
         custom_app -> String.to_atom(custom_app)
       end
 
@@ -73,7 +81,7 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp detect_phoenix(igniter) do
-    case Igniter.Libs.Phoenix.select_router(igniter) do
+    case Phoenix.select_router(igniter) do
       {igniter, nil} -> {igniter, false, nil}
       {igniter, router} -> {igniter, true, router}
     end
@@ -83,7 +91,7 @@ defmodule Mix.Tasks.Amur.Install do
     if opts[:app] do
       {igniter, Module.concat([Macro.camelize(to_string(app_name)) <> "Web"])}
     else
-      case Igniter.Libs.Phoenix.web_module(igniter) do
+      case Phoenix.web_module(igniter) do
         {igniter, mod} when is_atom(mod) -> {igniter, mod}
         mod when is_atom(mod) -> {igniter, mod}
       end
@@ -148,7 +156,7 @@ defmodule Mix.Tasks.Amur.Install do
   defp validate_controller_options!(igniter, opts, web_module) do
     if opts[:controller] == false && opts[:config] != false do
       controller_module = Module.concat([web_module, AuthController])
-      target_path = Igniter.Project.Module.proper_location(igniter, controller_module)
+      target_path = ProjectModule.proper_location(igniter, controller_module)
 
       unless Igniter.exists?(igniter, target_path) do
         Mix.raise(
@@ -250,7 +258,7 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp add_router(igniter, true, router) do
     {igniter, has_browser_pipeline?} =
-      Igniter.Libs.Phoenix.has_pipeline(igniter, router, :browser)
+      Phoenix.has_pipeline(igniter, router, :browser)
 
     contents =
       if has_browser_pipeline? do
@@ -262,7 +270,7 @@ defmodule Mix.Tasks.Amur.Install do
         "forward \"/\", Amur.Router"
       end
 
-    Igniter.Libs.Phoenix.add_scope(
+    Phoenix.add_scope(
       igniter,
       "/auth",
       contents,
@@ -275,13 +283,13 @@ defmodule Mix.Tasks.Amur.Install do
     igniter = Igniter.include_all_elixir_files(igniter)
 
     {igniter, modules} =
-      Igniter.Project.Module.find_all_matching_modules(igniter, fn _module, zipper ->
-        match?({:ok, _}, Igniter.Code.Module.move_to_use(zipper, Plug.Router))
+      ProjectModule.find_all_matching_modules(igniter, fn _module, zipper ->
+        match?({:ok, _}, CodeModule.move_to_use(zipper, Plug.Router))
       end)
 
     case modules do
       [module | _] ->
-        Igniter.Project.Module.find_and_update_module!(
+        ProjectModule.find_and_update_module!(
           igniter,
           module,
           &update_plug_router/1
@@ -303,8 +311,8 @@ defmodule Mix.Tasks.Amur.Install do
   defp has_auth_forward?(zipper) do
     match?(
       {:ok, _},
-      Igniter.Code.Function.move_to_function_call(zipper, :forward, 2, fn call ->
-        auth_forward_call?(Sourceror.Zipper.node(call))
+      Function.move_to_function_call(zipper, :forward, 2, fn call ->
+        auth_forward_call?(Zipper.node(call))
       end)
     )
   end
@@ -319,20 +327,20 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp patch_plug_router_zipper(zipper) do
     dispatch_call =
-      Igniter.Code.Function.move_to_function_call(zipper, :plug, [1, 2], fn call ->
-        match?({:plug, _, [:dispatch | _]}, Sourceror.Zipper.node(call))
+      Function.move_to_function_call(zipper, :plug, [1, 2], fn call ->
+        match?({:plug, _, [:dispatch | _]}, Zipper.node(call))
       end)
 
     forward_ast = Sourceror.parse_string!("forward(\"/auth\", to: Amur.Router)")
 
     case dispatch_call do
       {:ok, call_zipper} ->
-        Sourceror.Zipper.insert_left(call_zipper, forward_ast)
+        Zipper.insert_left(call_zipper, forward_ast)
 
       _ ->
-        case Igniter.Code.Module.move_to_use(zipper, Plug.Router) do
+        case CodeModule.move_to_use(zipper, Plug.Router) do
           {:ok, use_zipper} ->
-            Sourceror.Zipper.insert_right(use_zipper, forward_ast)
+            Zipper.insert_right(use_zipper, forward_ast)
 
           _ ->
             zipper
@@ -354,13 +362,13 @@ defmodule Mix.Tasks.Amur.Install do
     providers_code = providers_config_code(providers)
 
     igniter
-    |> Igniter.Project.Config.configure(
+    |> ProjectConfig.configure(
       "runtime.exs",
       :amur,
       [:base_url],
       {:code, Sourceror.parse_string!(base_url_expr)}
     )
-    |> Igniter.Project.Config.configure(
+    |> ProjectConfig.configure(
       "runtime.exs",
       :amur,
       [:providers],
@@ -372,31 +380,33 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp add_dotenv_loader(igniter) do
     Igniter.update_elixir_file(igniter, "config/runtime.exs", fn zipper ->
-      source = zipper |> Sourceror.Zipper.topmost() |> Sourceror.Zipper.node()
+      source = zipper |> Zipper.topmost() |> Zipper.node()
 
       if dotenv_loader_present?(source) do
         {:ok, zipper}
       else
-        case Igniter.Code.Function.move_to_function_call_in_current_scope(
-               zipper,
-               :import,
-               1,
-               fn call ->
-                 Igniter.Code.Function.argument_matches_predicate?(
-                   call,
-                   0,
-                   &Igniter.Code.Common.nodes_equal?(&1, Config)
-                 )
-               end
-             ) do
-          {:ok, import_zipper} ->
-            {:ok, Igniter.Code.Common.add_code(import_zipper, dotenv_loader())}
-
-          :error ->
-            {:ok, Igniter.Code.Common.add_code(zipper, dotenv_loader(), placement: :before)}
-        end
+        add_dotenv_loader_code(zipper)
       end
     end)
+  end
+
+  defp add_dotenv_loader_code(zipper) do
+    case Function.move_to_function_call_in_current_scope(
+           zipper,
+           :import,
+           1,
+           &config_import?/1
+         ) do
+      {:ok, import_zipper} ->
+        {:ok, Common.add_code(import_zipper, dotenv_loader())}
+
+      :error ->
+        {:ok, Common.add_code(zipper, dotenv_loader(), placement: :before)}
+    end
+  end
+
+  defp config_import?(call) do
+    Function.argument_matches_predicate?(call, 0, &Common.nodes_equal?(&1, Config))
   end
 
   defp dotenv_loader_present?(source) do
@@ -432,13 +442,13 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp maybe_configure_callbacks(igniter, web_module, true) do
     igniter
-    |> Igniter.Project.Config.configure(
+    |> ProjectConfig.configure(
       "runtime.exs",
       :amur,
       [:on_success],
       {:code, Sourceror.parse_string!("&#{inspect(web_module)}.AuthController.on_success/2")}
     )
-    |> Igniter.Project.Config.configure(
+    |> ProjectConfig.configure(
       "runtime.exs",
       :amur,
       [:on_failure],
