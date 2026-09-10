@@ -354,7 +354,7 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_config(igniter, web_module, providers, _phoenix?, controller?) do
-    base_url_expr = "System.get_env(\"BASE_URL\") || \"http://localhost:4000\""
+    base_url_expr = "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
 
     providers_code = providers_config_code(providers)
 
