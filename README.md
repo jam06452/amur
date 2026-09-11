@@ -1,9 +1,17 @@
 
-# Amur
+# Amur - OAuth 2.0 and OAuth 1.0 for Elixir Plug and Phoenix
 
-Simple [OAuth](https://auth0.com/intro-to-iam/what-is-oauth-2) for Plug applications.
+[![Hex.pm](https://img.shields.io/hexpm/v/amur.svg)](https://hex.pm/packages/amur)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-8e44ad.svg)](https://hexdocs.pm/amur)
 
-Amur gives Plug applications a small, provider agnostic OAuth flow without requiring Phoenix. It handles the OAuth handshake, state/[PKCE](https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce), provider specific configuration, and user normalization. All of this while leaving authentication and user data management up to your application.
+Amur is an Elixir OAuth client and authentication library for
+[Plug](https://hexdocs.pm/plug) and Phoenix applications.
+
+It provides a small, provider-agnostic OAuth login flow without requiring
+Phoenix. Amur handles the OAuth handshake, state protection,
+[PKCE](https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce),
+provider-specific configuration, and user normalization while leaving
+authentication and user data management up to your application.
 
 - Plug-native, works with Phoenix or standalone Plug
 - State & PKCE, handled automatically
