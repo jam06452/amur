@@ -6,7 +6,8 @@ defmodule Amur.MixProject do
       app: :amur,
       version: "0.3.4",
       elixir: "~> 1.15",
-      description: "Simple OAuth for Plug apps",
+      description:
+        "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
       aliases: aliases(),
       dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
@@ -20,6 +21,9 @@ defmodule Amur.MixProject do
       main: "readme",
       extras: ["README.md"],
       assets: %{"assets" => "assets"},
+      source_url: "https://github.com/jam06452/amur",
+      homepage_url: "https://hex.pm/packages/amur",
+      canonical: "https://hexdocs.pm/amur",
       groups_for_modules: [
         Providers: [
           ~r/^Amur\.Providers(\.|$)/
@@ -53,7 +57,11 @@ defmodule Amur.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/jam06452/amur"}
+      links: %{
+        "GitHub" => "https://github.com/jam06452/amur",
+        "HexDocs" => "https://hexdocs.pm/amur",
+        "Hex" => "https://hex.pm/packages/amur"
+      }
     ]
   end
 end
