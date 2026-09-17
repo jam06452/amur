@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "github: ["
     assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
     assert runtime =~ "SampleWeb.AuthController.on_success/2"
-    assert runtime =~ "System.get_env(\"BASE_URL\") || \"http://localhost:4000\""
+    assert runtime =~ "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
     refute runtime =~ "Endpoint.url()"
     refute runtime =~ "AMUR_DOTENV_LOADER"
     assert runtime =~ "Mix.env() != :test"
