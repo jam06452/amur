@@ -7,7 +7,7 @@ defmodule Amur.MixProject do
       version: "0.3.4",
       elixir: "~> 1.15",
       description:
-        "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
+        "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 32 providers.",
       aliases: aliases(),
       dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
@@ -36,9 +36,20 @@ defmodule Amur.MixProject do
     [extra_applications: [:logger]]
   end
 
+  def cli do
+    [preferred_envs: [ci: :test]]
+  end
+
   defp aliases do
     [
-      ci: ["credo --strict", "format --check-formatted", "deps.audit", "dialyzer", "sobelow"]
+      ci: [
+        "test",
+        "credo --strict",
+        "format --check-formatted",
+        "deps.audit",
+        "dialyzer",
+        "sobelow"
+      ]
     ]
   end
 
