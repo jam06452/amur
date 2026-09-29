@@ -9,7 +9,7 @@ defmodule Amur.Providers.DigitalOceanTest do
 
   test "base_config/0 includes read write scope" do
     assert Keyword.get(DigitalOcean.base_config(), :authorization_params) == [
-             scope: "read write",
+             scope: "read",
              response_type: "code"
            ]
   end

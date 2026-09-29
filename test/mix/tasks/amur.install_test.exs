@@ -29,7 +29,13 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     Igniter.Test.test_project(files: Map.merge(default_files, files))
     |> Igniter.compose_task("amur.install", args)
-    |> Igniter.Test.apply_igniter!()
+    |> then(fn igniter ->
+      notices = igniter.notices
+
+      igniter
+      |> Igniter.Test.apply_igniter!()
+      |> Igniter.assign(:install_notices, notices)
+    end)
   end
 
   test "generates Phoenix boilerplate with the default GitHub provider" do
@@ -57,7 +63,8 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "github: ["
     assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
     assert runtime =~ "SampleWeb.AuthController.on_success/2"
-    assert runtime =~ "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
+    assert runtime =~ "System.get_env(\"BASE_URL\", \"http://localhost:4000\")"
+    refute runtime =~ "GITHUB_BASE_URL"
     refute runtime =~ "Endpoint.url()"
     refute runtime =~ "AMUR_DOTENV_LOADER"
     assert runtime =~ "Mix.env() != :test"
@@ -89,7 +96,47 @@ defmodule Mix.Tasks.Amur.InstallTest do
       env_prefix = provider |> Atom.to_string() |> String.upcase()
       assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_ID\")"
       assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_SECRET\")"
+
+      if provider in [:auth0, :authentik, :aws_cognito, :keycloak, :okta, :shopify, :zitadel] do
+        assert runtime =~
+                 ~r/#{provider}: \[\s+base_url: System.fetch_env!\("#{env_prefix}_BASE_URL"\)/
+
+        assert Enum.any?(
+                 igniter.assigns[:install_notices],
+                 &String.contains?(&1, "#{env_prefix}_BASE_URL")
+               )
+      else
+        refute runtime =~ "#{env_prefix}_BASE_URL"
+      end
     end
+
+    assert {:ok, _} = Code.string_to_quoted(runtime)
+  end
+
+  test "generates provider base URLs alongside credentials for selected custom hosts" do
+    igniter =
+      apply_install(["--app", "sample", "--provider", "aws_cognito,keycloak,okta", "--yes"])
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+
+    for {provider, prefix} <- [
+          aws_cognito: "AWS_COGNITO",
+          keycloak: "KEYCLOAK",
+          okta: "OKTA"
+        ] do
+      assert runtime =~
+               """
+                   #{provider}: [
+                     base_url: System.fetch_env!("#{prefix}_BASE_URL"),
+                     client_id: System.fetch_env!("#{prefix}_CLIENT_ID"),
+                     client_secret: System.fetch_env!("#{prefix}_CLIENT_SECRET")
+                   ]
+               """
+               |> String.trim()
+    end
+
+    refute runtime =~ "GITHUB_CLIENT_ID"
+    assert {:ok, _} = Code.string_to_quoted(runtime)
   end
 
   test "--provider and --all are mutually exclusive" do
