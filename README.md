@@ -16,7 +16,7 @@ authentication and user data management up to your application.
 - Plug-native, works with Phoenix or standalone Plug
 - State & PKCE, handled automatically
 - Stateless by default, temporary OAuth state is cleared from session after the callback
-- 24 built-in [providers](#built-in-providers)
+- 32 built-in [providers](#built-in-providers)
 - Normalized users, the same data format across providers
 - Custom providers, add providers that aren't built in
 - Igniter, get started in under 60 seconds
@@ -75,6 +75,8 @@ Amur ships with support for the following providers:
 
 - [Apple](https://developer.apple.com/documentation/signinwithapple),
 - [Auth0](https://auth0.com/docs/get-started/auth0-overview/create-applications)
+- [Authentik](https://docs.goauthentik.io/docs/add-secure-apps/oauth2/)
+- [AWS Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-OAuth-Token-endpoint.html)
 - [Azure AD](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
 - [Basecamp](https://github.com/basecamp/bc3-api/blob/master/sections/authentication.md)
 - [Bitbucket](https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/)
@@ -86,8 +88,14 @@ Amur ships with support for the following providers:
 - [Google](https://developers.google.com/identity/protocols/oauth2)
 - [Hack Club](https://auth.hackclub.com/docs/oauth-guide)
 - [Instagram](https://developers.facebook.com/docs/instagram-basic-display-api/getting-started)
+- [Keycloak](https://www.keycloak.org/docs/latest/securing-apps/)
 - [LINE](https://developers.line.biz/en/docs/line-login/integrate-line-login/)
 - [LinkedIn](https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2)
+- [Okta](https://developer.okta.com/docs/api/oauth/)
+- [Patreon](https://docs.patreon.com/)
+- [Reddit](https://www.reddit.com/dev/api/oauth)
+- [Salesforce](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm)
+- [Shopify](https://shopify.dev/docs/apps/auth/oauth)
 - [Slack](https://api.slack.com/authentication/oauth-v2)
 - [Spotify](https://developer.spotify.com/documentation/web-api/concepts/authorization)
 - [Strava](https://developers.strava.com/docs/authentication/)
@@ -164,7 +172,7 @@ This is what igniter sets up for you automatically.
 ```elixir
 # config/runtime.exs
 config :amur,
-  base_url: System.get_env("BASE_URL") || "http://localhost:4000",
+  base_url: System.get_env("BASE_URL", "http://localhost:4000"),
   providers: [
     github: [
       client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
@@ -181,6 +189,79 @@ config :amur,
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
 | `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
+
+#### Provider-specific base URLs
+
+Auth0, Authentik, AWS Cognito, Keycloak, Okta, Shopify, and Zitadel require an
+instance-specific `base_url`. The installer generates this inside each provider's
+configuration using `System.fetch_env!("<PROVIDER>_BASE_URL")`, alongside its client
+ID and secret:
+
+```elixir
+# config/runtime.exs
+config :amur,
+  base_url: System.get_env("BASE_URL", "http://localhost:4000"),
+  providers: [
+    aws_cognito: [
+      base_url: System.fetch_env!("AWS_COGNITO_BASE_URL"),
+      client_id: System.fetch_env!("AWS_COGNITO_CLIENT_ID"),
+      client_secret: System.fetch_env!("AWS_COGNITO_CLIENT_SECRET")
+    ],
+    keycloak: [
+      base_url: System.fetch_env!("KEYCLOAK_BASE_URL"),
+      client_id: System.fetch_env!("KEYCLOAK_CLIENT_ID"),
+      client_secret: System.fetch_env!("KEYCLOAK_CLIENT_SECRET")
+    ],
+    okta: [
+      base_url: System.fetch_env!("OKTA_BASE_URL"),
+      client_id: System.fetch_env!("OKTA_CLIENT_ID"),
+      client_secret: System.fetch_env!("OKTA_CLIENT_SECRET")
+    ]
+  ]
+```
+
+For example, set `KEYCLOAK_BASE_URL=https://keycloak.example.com/realms/myrealm`
+or `OKTA_BASE_URL=https://your-org.okta.com/oauth2/default` in your environment
+or `.env`. The top-level `base_url` is your application's URL for callbacks;
+the nested `base_url` is the provider's URL. Providers with hosted defaults keep
+those defaults; you can override their nested `base_url` in the same way for,
+for example, self-hosted GitLab or a Salesforce sandbox.
+
+AWS Cognito uses OpenID Connect discovery. Set `AWS_COGNITO_BASE_URL` to the
+user pool's issuer URL, for example
+`https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Example`, **not** its hosted
+UI domain. Existing Cognito configurations using a hosted UI domain must update
+this value; authorization, token, and userinfo endpoints are discovered automatically.
+
+Authentik, Keycloak, and Okta also use OpenID Connect discovery, retaining their
+existing runtime environment variables:
+
+| Variable | Example value |
+|---|---|
+| `AUTHENTIK_BASE_URL` | `https://authentik.example.com/application/o/my-app` |
+| `KEYCLOAK_BASE_URL` | `https://keycloak.example.com/realms/myrealm` |
+| `OKTA_BASE_URL` | `https://your-org.okta.com/oauth2/default` |
+
+Authentik discovery uses the application path even with global issuer mode;
+ID tokens are checked against the issuer advertised by that discovery document.
+Configure an RS256 signing key for the Authentik provider to match Assent's
+expected signing algorithm.
+
+**Migrating from generic OAuth2:** these three providers now require valid ID
+tokens and normalize their claims instead of fetching userinfo. Configure the
+provider's ID-token claim mappings to include the desired `email`, `name`,
+`preferred_username`, and `picture` fields; missing optional fields remain `nil`.
+If overriding client authentication, use
+`client_authentication_method: "client_secret_basic"` (or another supported OIDC
+method) instead of `auth_method`. Assent adds `openid` automatically to the
+requested scopes.
+
+Amur prepends `https://` to non-empty base URLs without an HTTP(S) scheme,
+including custom provider defaults and the top-level application `base_url`.
+For example, `AUTH0_BASE_URL=your-tenant.auth0.com` becomes
+`https://your-tenant.auth0.com`. Explicit `https://` and `http://` URLs are
+preserved, so local development can still use `http://localhost:4000`.
+An empty application base URL continues to produce relative callback paths.
 
 ### 2. Mount the router
 

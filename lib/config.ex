@@ -18,6 +18,8 @@ defmodule Amur.Config do
   @built_ins %{
     apple: Amur.Providers.Apple,
     auth0: Amur.Providers.Auth0,
+    authentik: Amur.Providers.Authentik,
+    aws_cognito: Amur.Providers.AWSCognito,
     azure_ad: Amur.Providers.AzureAD,
     basecamp: Amur.Providers.Basecamp,
     bitbucket: Amur.Providers.Bitbucket,
@@ -29,8 +31,14 @@ defmodule Amur.Config do
     google: Amur.Providers.Google,
     hackclub: Amur.Providers.HackClub,
     instagram: Amur.Providers.Instagram,
+    keycloak: Amur.Providers.Keycloak,
     line: Amur.Providers.LINE,
     linkedin: Amur.Providers.Linkedin,
+    okta: Amur.Providers.Okta,
+    patreon: Amur.Providers.Patreon,
+    reddit: Amur.Providers.Reddit,
+    salesforce: Amur.Providers.Salesforce,
+    shopify: Amur.Providers.Shopify,
     slack: Amur.Providers.Slack,
     spotify: Amur.Providers.Spotify,
     strava: Amur.Providers.Strava,
@@ -83,7 +91,7 @@ defmodule Amur.Config do
 
   defp build_config(module, provider) do
     configured_providers = Application.get_env(:amur, :providers, [])
-    base_url = Application.get_env(:amur, :base_url, "")
+    base_url = Application.get_env(:amur, :base_url, "") |> normalize_base_url()
     credentials = Keyword.get(configured_providers, provider, [])
 
     {scopes, credentials} =
@@ -94,12 +102,22 @@ defmodule Amur.Config do
     config =
       module.base_config()
       |> Keyword.merge(credentials)
+      |> Enum.map(fn
+        {:base_url, url} -> {:base_url, normalize_base_url(url)}
+        entry -> entry
+      end)
       |> Keyword.put(:strategy, module.strategy())
       |> Keyword.put_new(:redirect_uri, "#{base_url}/auth/#{provider}/callback")
       |> merge_scopes(scopes)
 
     {:ok, {module, config}}
   end
+
+  defp normalize_base_url(""), do: ""
+  defp normalize_base_url("https://" <> _ = url), do: url
+  defp normalize_base_url("http://" <> _ = url), do: url
+  defp normalize_base_url(url) when is_binary(url), do: "https://" <> url
+  defp normalize_base_url(url), do: url
 
   defp merge_scopes(config, nil), do: config
 
