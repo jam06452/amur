@@ -17,6 +17,16 @@ defmodule Mix.Tasks.Amur.Install do
   alias Igniter.Project.Module, as: ProjectModule
   alias Sourceror.Zipper
 
+  @custom_base_url_providers [
+    :auth0,
+    :authentik,
+    :aws_cognito,
+    :keycloak,
+    :okta,
+    :shopify,
+    :zitadel
+  ]
+
   @doc """
   Describes the options accepted by `mix igniter.install amur`.
 
@@ -354,7 +364,7 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_config(igniter, web_module, providers, _phoenix?, controller?) do
-    base_url_expr = "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
+    base_url_expr = "System.get_env(\"BASE_URL\", \"http://localhost:4000\")"
 
     providers_code = providers_config_code(providers)
 
@@ -455,15 +465,31 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp providers_config_code(providers) do
     Enum.map_join(providers, ",\n    ", fn provider ->
-      env = provider |> Atom.to_string() |> String.upcase()
+      config =
+        provider_env_keys(provider)
+        |> Enum.map_join(",\n  ", fn {key, env} ->
+          ~s|#{key}: System.fetch_env!("#{env}")|
+        end)
 
       """
       #{provider}: [
-        client_id: System.fetch_env!("#{env}_CLIENT_ID"),
-        client_secret: System.fetch_env!("#{env}_CLIENT_SECRET")
+        #{config}
       ]
       """
       |> String.trim()
+    end)
+  end
+
+  defp provider_env_keys(provider) do
+    prefix = provider |> Atom.to_string() |> String.upcase()
+
+    keys =
+      if provider in @custom_base_url_providers,
+        do: [:base_url, :client_id, :client_secret],
+        else: [:client_id, :client_secret]
+
+    Enum.map(keys, fn key ->
+      {key, "#{prefix}_#{key |> Atom.to_string() |> String.upcase()}"}
     end)
   end
 
@@ -476,11 +502,8 @@ defmodule Mix.Tasks.Amur.Install do
       else
         env_keys =
           providers
-          |> Enum.flat_map(fn p ->
-            prefix = p |> Atom.to_string() |> String.upcase()
-            ["#{prefix}_CLIENT_ID", "#{prefix}_CLIENT_SECRET"]
-          end)
-          |> Enum.join(", ")
+          |> Enum.flat_map(&provider_env_keys/1)
+          |> Enum.map_join(", ", fn {_key, env} -> env end)
 
         controller_step =
           if opts[:controller] == false do
