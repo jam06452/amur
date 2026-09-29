@@ -15,8 +15,8 @@ defmodule Amur.Providers.DigitalOcean do
       authorize_url: "https://cloud.digitalocean.com/v1/oauth/authorize",
       token_url: "https://cloud.digitalocean.com/v1/oauth/token",
       user_url: "/v2/account",
-      authorization_params: [scope: "read write", response_type: "code"],
-      auth_method: :client_secret_post
+      authorization_params: [scope: "read", response_type: "code"],
+      client_authentication_method: "client_secret_post"
     ]
   end
 
