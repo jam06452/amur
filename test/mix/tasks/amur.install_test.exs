@@ -2,6 +2,11 @@ defmodule Mix.Tasks.Amur.InstallTest do
   use ExUnit.Case, async: false
 
   defp apply_install(args, files \\ %{}) do
+    {:ok, igniter, _messages} = apply_install_with_messages(args, files)
+    igniter
+  end
+
+  defp apply_install_with_messages(args, files) do
     default_files = %{
       "lib/sample_web.ex" => """
       defmodule SampleWeb do
@@ -29,7 +34,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     Igniter.Test.test_project(files: Map.merge(default_files, files))
     |> Igniter.compose_task("amur.install", args)
-    |> Igniter.Test.apply_igniter!()
+    |> Igniter.Test.apply_igniter()
   end
 
   test "generates Phoenix boilerplate with the default GitHub provider" do
@@ -195,23 +200,22 @@ defmodule Mix.Tasks.Amur.InstallTest do
       apply_install(
         ["--app", "sample", "--yes"],
         %{
-          "lib/sample_web/router.ex" => """
-          defmodule SampleWeb.Router do
+          "lib/sample/router.ex" => """
+          defmodule Sample.Router do
             use Plug.Router
-            forward "/auth", Amur.Router
+            forward("/auth", to: Amur.Router)
           end
           """
         }
       )
 
-    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
-    assert router =~ "forward"
-    assert router =~ "Amur.Router"
+    router = igniter.assigns[:test_files]["lib/sample/router.ex"]
+    assert length(Regex.scan(~r/forward\(\"\/auth\"[^\n]*Amur\.Router/, router)) == 1
   end
 
   test "warns when no standalone Plug router can be found" do
-    igniter =
-      apply_install(
+    {:ok, _igniter, %{warnings: warnings}} =
+      apply_install_with_messages(
         ["--app", "sample", "--no-controller", "--no-config", "--yes"],
         %{
           "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
@@ -219,7 +223,10 @@ defmodule Mix.Tasks.Amur.InstallTest do
         }
       )
 
-    assert is_map(igniter.assigns[:test_files])
+    assert Enum.any?(
+             warnings,
+             &String.contains?(&1, "Could not find a Plug.Router module to patch.")
+           )
   end
 
   test "requires an existing controller when configuration is requested without generation" do
