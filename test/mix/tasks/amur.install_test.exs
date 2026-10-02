@@ -139,4 +139,139 @@ defmodule Mix.Tasks.Amur.InstallTest do
       apply_install(["--app", "sample", "--provider", "foo-bar", "--yes"])
     end
   end
+
+  test "rejects unknown built-in providers" do
+    assert_raise Mix.Error, ~r/Unknown built-in provider/, fn ->
+      apply_install(["--app", "sample", "--provider", "nope", "--yes"])
+    end
+  end
+
+  test "can skip router generation" do
+    igniter = apply_install(["--app", "sample", "--no-router", "--yes"])
+
+    refute igniter.assigns[:test_files]["lib/sample_web/router.ex"] =~ "forward"
+  end
+
+  test "leaves an existing auth controller unchanged" do
+    existing = """
+    defmodule SampleWeb.AuthController do
+      def on_success(conn, _context), do: conn
+      def on_failure(conn, _reason), do: conn
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/controllers/auth_controller.ex" => existing}
+      )
+
+    assert igniter.assigns[:test_files]["lib/sample_web/controllers/auth_controller.ex"] ==
+             existing
+  end
+
+  test "patches a standalone Plug router with an auth forward" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
+          "lib/sample/router.ex" => """
+          defmodule Sample.Router do
+            use Plug.Router
+            plug :match
+            plug :dispatch
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample/router.ex"]
+    assert router =~ ~s|forward("/auth", to: Amur.Router)|
+  end
+
+  test "does not duplicate an existing standalone auth forward" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Plug.Router
+            forward "/auth", Amur.Router
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert router =~ "forward"
+    assert router =~ "Amur.Router"
+  end
+
+  test "warns when no standalone Plug router can be found" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--no-controller", "--no-config", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
+          "lib/sample.ex" => "defmodule Sample do\nend\n"
+        }
+      )
+
+    assert is_map(igniter.assigns[:test_files])
+  end
+
+  test "requires an existing controller when configuration is requested without generation" do
+    assert_raise Mix.Error, ~r/--no-controller cannot be combined/, fn ->
+      apply_install(["--app", "sample", "--no-controller", "--yes"])
+    end
+  end
+
+  test "does not add a duplicate dotenv loader" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "config/runtime.exs" => """
+          import Config
+          if Mix.env() != :test and File.exists?(".env") do
+          ".env"
+          |> File.read!()
+          |> String.split("\n", trim: true)
+          |> Enum.each(fn line ->
+            case String.split(line, "=", parts: 2) do
+              [key, val] -> System.put_env(key, val)
+              _ -> :ok
+            end
+            end)
+          end
+          """
+        }
+      )
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert length(Regex.scan(~r/File\.exists\?\("\.env"\)/, runtime)) == 1
+  end
+
+  test "adds the dotenv loader before a runtime file without Config import" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "config/runtime.exs" => """
+          System.put_env("EXISTING", "true")
+          """
+        }
+      )
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ "File.exists?(\".env\")"
+  end
+
+  test "reports generated boilerplate without runtime configuration" do
+    igniter = apply_install(["--app", "sample", "--no-config", "--yes"])
+
+    assert is_map(igniter.assigns[:test_files])
+  end
 end
