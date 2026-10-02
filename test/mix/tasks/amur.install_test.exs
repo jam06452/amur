@@ -274,11 +274,14 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     runtime = igniter.assigns[:test_files]["config/runtime.exs"]
     assert runtime =~ "File.exists?(\".env\")"
+    {loader_index, _} = :binary.match(runtime, "File.exists?(\".env\")")
+    {existing_index, _} = :binary.match(runtime, "System.put_env(\"EXISTING\", \"true\")")
+    assert loader_index < existing_index
   end
 
   test "reports generated boilerplate without runtime configuration" do
     igniter = apply_install(["--app", "sample", "--no-config", "--yes"])
 
-    assert is_map(igniter.assigns[:test_files])
+    refute Map.has_key?(igniter.assigns[:test_files], "config/runtime.exs")
   end
 end
