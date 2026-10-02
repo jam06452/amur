@@ -18,7 +18,7 @@ defmodule Amur.MixProject do
   end
 
   def cli do
-    [preferred_envs: [ci: :test, test: :test, "test.coverage": :test]]
+    [preferred_envs: [{:"test.coverage", :test}, ci: :test, test: :test]]
   end
 
   defp docs do
