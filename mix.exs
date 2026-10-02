@@ -9,11 +9,16 @@ defmodule Amur.MixProject do
       description:
         "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
       aliases: aliases(),
+      cli: cli(),
       dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
       package: package(),
       docs: docs()
     ]
+  end
+
+  def cli do
+    [preferred_envs: [{:"test.coverage", :test}, ci: :test, test: :test]]
   end
 
   defp docs do
@@ -38,7 +43,15 @@ defmodule Amur.MixProject do
 
   defp aliases do
     [
-      ci: ["credo --strict", "format --check-formatted", "deps.audit", "dialyzer", "sobelow"]
+      {:"test.coverage", ["test --cover"]},
+      ci: [
+        "test",
+        "credo --strict",
+        "format --check-formatted",
+        "deps.audit",
+        "dialyzer",
+        "sobelow"
+      ]
     ]
   end
 
