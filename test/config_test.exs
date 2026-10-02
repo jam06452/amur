@@ -66,4 +66,24 @@ defmodule Amur.ConfigTest do
     Application.put_env(:amur, :providers, [])
     assert {:error, :unknown_provider} = Amur.Config.resolve(:custom)
   end
+
+  test "resolve/1 rejects credentials for an unknown configured provider" do
+    Application.put_env(:amur, :providers, unknown: [client_id: "id"])
+
+    assert {:error, :unknown_provider} = Amur.Config.resolve(:unknown)
+  end
+
+  test "resolve/1 overrides an existing authorization scope" do
+    Application.put_env(:amur, :providers, github: [scopes: "repo"])
+
+    assert {:ok, {_module, config}} = Amur.Config.resolve(:github)
+    assert config[:authorization_params] == [scope: "repo"]
+  end
+
+  test "resolve/1 adds authorization scope when provider has no defaults" do
+    Application.put_env(:amur, :providers, telegram: [scopes: "openid", client_id: "id"])
+
+    assert {:ok, {_module, config}} = Amur.Config.resolve(:telegram)
+    assert config[:authorization_params] == [scope: "openid"]
+  end
 end
