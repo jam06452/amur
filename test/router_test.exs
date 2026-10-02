@@ -47,6 +47,7 @@ defmodule Amur.RouterTest do
 
     conn = Amur.Router.call(%{conn | path_info: ["router", "callback"]}, [])
 
+    assert_receive {:callback_params, %{"provider" => "router", "code" => "abc"}}
     assert Plug.Conn.get_session(conn, :amur_session_params) == nil
   end
 
@@ -71,8 +72,10 @@ defmodule Amur.RouterTest do
         {:ok,
          %{url: "https://provider.example/authorize", session_params: %{state: "router-state"}}}
 
-    def callback(_config, _params),
-      do: {:ok, %{user: %{"id" => "1"}, token: %{access_token: "token"}}}
+    def callback(_config, %{"provider" => "router", "code" => "abc"} = params) do
+      send(self(), {:callback_params, params})
+      {:ok, %{user: %{"id" => "1"}, token: %{access_token: "token"}}}
+    end
   end
 
   defmodule Provider do
