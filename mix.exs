@@ -43,6 +43,7 @@ defmodule Amur.MixProject do
 
   defp aliases do
     [
+      {:"test.coverage", ["test --cover"]},
       ci: [
         "test",
         "credo --strict",
