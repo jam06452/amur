@@ -1,5 +1,5 @@
 defmodule Amur.ConfigTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   defmodule CustomProvider do
     use Amur.Provider
@@ -17,8 +17,19 @@ defmodule Amur.ConfigTest do
   end
 
   setup do
-    # Ensure clean env between tests
-    on_exit(fn -> Application.delete_env(:amur, :providers) end)
+    previous =
+      for key <- [:providers, :base_url],
+          into: %{},
+          do: {key, Application.get_env(:amur, key)}
+
+    on_exit(fn ->
+      for {key, value} <- previous do
+        if is_nil(value),
+          do: Application.delete_env(:amur, key),
+          else: Application.put_env(:amur, key, value)
+      end
+    end)
+
     :ok
   end
 
