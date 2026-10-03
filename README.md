@@ -50,6 +50,10 @@ mix igniter.install amur --provider <Your Provider>
 # Configure multiple providers
 mix igniter.install amur --provider github,google
 ```
+```bash
+# Also generate a sign-in page at /auth
+mix igniter.install amur --provider google,github,discord --page
+```
 
 Options:
 
@@ -57,6 +61,7 @@ Options:
 |---|---|
 | `--provider <name>` | Provider atom used in the generated config (default: `github`), look here for the list of [providers](#built-in-providers) |
 | `--all` | Generate config for every built-in provider (cannot be combined with `--provider`) |
+| `--page` | Serve a sign-in page listing the configured providers at `/auth` |
 | `--app <name>` | Override the detected app name |
 | `--no-config` / `--no-router` / `--no-controller` | Skip individual pieces |
 
@@ -179,6 +184,8 @@ config :amur,
 |---|---|---|
 | `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
+| `app_name` | no | Name shown in the sign-in page heading. Defaults to `"your account"`. |
+| `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](#logo). Defaults to the first provider's icon. |
 | `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
 
@@ -207,12 +214,73 @@ The router exposes three endpoints:
 
 | Endpoint | Description |
 |---|---|
+| `GET /auth` | Sign-in page listing the configured providers |
 | `GET /auth/:provider` | Initiates the OAuth flow |
 | `GET /auth/:provider/callback` | Handles the provider callback |
 
 Amur stores the OAuth handshake params (the `state`, PKCE verifier, ...) in
 the session for the duration of the flow and clears them automatically once
 the callback has been handled, no manual cleanup needed.
+
+### Sign-in page
+
+The sign-in page is served by `Amur.Router` from Amur's own `priv/` directory,
+so it works in Phoenix and in a standalone `Plug.Router` without copying any
+files into your application. It lists every provider configured under
+`:amur, :providers` and links each one to `/auth/:provider`.
+
+Passing `--page` to the installer records the application name shown in the
+page heading:
+
+```elixir
+config :amur,
+  app_name: "MyApp"
+```
+
+When no provider is configured the page responds with `404` rather than
+rendering an empty list.
+
+### Logo
+
+By default the page shows the first configured provider's icon. Supply your own
+logo with the `:logo` key, in any of these forms:
+
+A path to an image your application serves:
+
+```elixir
+config :amur,
+  logo: {:path, "/images/logo.svg"}
+```
+
+A local SVG file, which is read and inlined so the page needs no extra request:
+
+```elixir
+config :amur,
+  logo: {:file, "priv/static/images/logo.svg"}
+```
+
+Inline SVG markup:
+
+```elixir
+config :amur,
+  logo: {:svg, """
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <circle cx="12" cy="12" r="10" />
+  </svg>
+  """}
+```
+
+A bare string is resolved automatically: it is read as a local file when one
+exists at that path, and treated as a URL otherwise. So both of these work:
+
+```elixir
+config :amur, logo: "priv/static/images/logo.svg"  # inlined
+config :amur, logo: "/images/logo.svg"             # served by your app
+```
+
+A missing or unreadable file falls back to the provider icon rather than
+failing the page. Inline SVG inherits the page's text colour, so it adapts to
+light and dark mode automatically.
 
 ### 3. Add an auth controller
 
