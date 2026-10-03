@@ -33,7 +33,8 @@ defmodule Mix.Tasks.Amur.Install do
         all: :boolean,
         config: :boolean,
         router: :boolean,
-        controller: :boolean
+        controller: :boolean,
+        page: :boolean
       ],
       aliases: [
         p: :provider
@@ -48,6 +49,9 @@ defmodule Mix.Tasks.Amur.Install do
   `--provider` and `--all` options are mutually exclusive, and generated
   callbacks are wired only when a controller is requested. Multiple providers
   can be passed to `--provider` as a comma-separated list.
+
+  Passing `--page` also configures the application name used by the built-in
+  sign-in page, which `Amur.Router` serves at the mount point (`GET /auth`).
   """
   @impl Igniter.Mix.Task
   def igniter(igniter) do
@@ -77,6 +81,7 @@ defmodule Mix.Tasks.Amur.Install do
     |> maybe_add_controller(opts, web_module, phoenix?)
     |> maybe_add_router(opts, phoenix?, router)
     |> maybe_add_config(opts, web_module, providers, phoenix?)
+    |> maybe_add_page(opts, app_name)
     |> queue_next_steps(web_module, providers, opts)
   end
 
@@ -353,6 +358,22 @@ defmodule Mix.Tasks.Amur.Install do
     end
   end
 
+  # The sign-in page is served by `Amur.Router` from Amur's own `priv/`, so
+  # `--page` only needs to record the application name the page displays.
+  defp maybe_add_page(igniter, opts, app_name) do
+    if opts[:page] && opts[:config] != false do
+      ProjectConfig.configure(
+        igniter,
+        "runtime.exs",
+        :amur,
+        [:app_name],
+        {:code, Sourceror.parse_string!(inspect(to_string(app_name)))}
+      )
+    else
+      igniter
+    end
+  end
+
   defp add_config(igniter, web_module, providers, _phoenix?, controller?) do
     base_url_expr = "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
 
@@ -489,6 +510,13 @@ defmodule Mix.Tasks.Amur.Install do
             "      2. Customize auth success/failure handling:\n         #{inspect(web_module)}.AuthController"
           end
 
+        flow_step =
+          if opts[:page] do
+            "      3. Open the sign-in page at:\n         /auth"
+          else
+            "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
+          end
+
         """
             Required next steps:
               1. Export the following environment variables:
@@ -496,8 +524,7 @@ defmodule Mix.Tasks.Amur.Install do
 
         #{controller_step}
 
-              3. Initiate an OAuth flow at:
-                 /auth/#{provider_example}
+        #{flow_step}
         """
       end
 
