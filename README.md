@@ -218,6 +218,48 @@ config :amur,
   ]
 ```
 
+### Custom provider logo
+
+A custom provider has no bundled icon, so its sign-in button renders without
+one. Give it a logo by implementing the optional `logo/0` callback, which
+accepts the same forms as the page-level [`logo`](#logo) configuration:
+
+```elixir
+defmodule MyApp.Auth.CustomProvider do
+  use Amur.Provider
+
+  # ... strategy/0, base_config/0, normalize_user/1 ...
+
+  @impl true
+  def logo, do: {:file, "priv/static/images/my_provider.svg"}
+end
+```
+
+```elixir
+@impl true
+def logo, do: {:path, "/images/my_provider.svg"}
+```
+
+```elixir
+@impl true
+def logo do
+  {:svg, """
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="12" cy="12" r="10" />
+  </svg>
+  """}
+end
+```
+
+A bare string is resolved automatically, as with the page logo: it is read as a
+local file when one exists at that path, and treated as a URL otherwise. Inline
+SVG inherits the page's text colour, so it adapts to light and dark mode.
+
+When `logo/0` is not implemented (or returns `:error`), the provider falls back
+to its bundled icon if one exists, and otherwise renders no icon. The page logo
+shown above the heading also falls back to the first provider that has an icon,
+so a custom provider's logo is used there too when it is the first one.
+
 ## Scopes
 
 When the default scope isn't fit for your needs you can use a custom scope to get exactly whats needed. To request specific OAuth scopes, pass them in your provider config:
@@ -258,7 +300,7 @@ config :amur,
 | `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
 | `app_name` | no | Name shown in the sign-in page heading. Defaults to `"your account"`. |
-| `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](#logo). Defaults to the first provider's icon. |
+| `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](#logo). Defaults to the first provider's icon, including a custom provider's [`logo/0`](#custom-provider-logo). |
 | `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
 
@@ -354,6 +396,10 @@ config :amur, logo: "/images/logo.svg"             # served by your app
 A missing or unreadable file falls back to the provider icon rather than
 failing the page. Inline SVG inherits the page's text colour, so it adapts to
 light and dark mode automatically.
+
+The fallback provider icon is the first configured provider that has one, which
+includes a custom provider's [`logo/0`](#custom-provider-logo) when it is
+implemented.
 
 ### 3. Add an auth controller
 
