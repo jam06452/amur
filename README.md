@@ -300,7 +300,7 @@ config :amur,
 | `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
 | `app_name` | no | Name shown in the sign-in page heading. Defaults to `"your account"`. |
-| `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](#logo). Defaults to the first provider's icon, including a custom provider's [`logo/0`](#custom-provider-logo). |
+| `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](#logo). Defaults to no logo. |
 | `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |
 
@@ -357,8 +357,8 @@ rendering an empty list.
 
 ### Logo
 
-By default the page shows the first configured provider's icon. Supply your own
-logo with the `:logo` key, in any of these forms:
+By default the page shows no logo, so it never displays another company's mark.
+Supply your own logo with the `:logo` key, in any of these forms:
 
 A path to an image your application serves:
 
@@ -393,13 +393,9 @@ config :amur, logo: "priv/static/images/logo.svg"  # inlined
 config :amur, logo: "/images/logo.svg"             # served by your app
 ```
 
-A missing or unreadable file falls back to the provider icon rather than
-failing the page. Inline SVG inherits the page's text colour, so it adapts to
-light and dark mode automatically.
-
-The fallback provider icon is the first configured provider that has one, which
-includes a custom provider's [`logo/0`](#custom-provider-logo) when it is
-implemented.
+A missing or unreadable file, or an invalid value, leaves the page without a
+logo rather than failing it. Inline SVG inherits the page's text colour, so it
+adapts to light and dark mode automatically.
 
 ### 3. Add an auth controller
 

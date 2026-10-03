@@ -3,10 +3,11 @@
 <main class="amur-page">
   <section class="amur-card">
     <%= case logo do %>
+      <% :none -> %>
       <% {:svg, markup} -> %>
         <span class="amur-logo" aria-hidden="true"><%= markup %></span>
       <% {:path, path} -> %>
-        <img class="amur-logo" src="<%= path %>" alt="" />
+        <img class="amur-logo" src="<%= Plug.HTML.html_escape(path) %>" alt="" />
     <% end %>
     <h1 class="amur-title">Sign in to <%= Plug.HTML.html_escape(app_name) %></h1>
     <p class="amur-divider">Choose an account to continue</p>

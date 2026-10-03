@@ -109,7 +109,7 @@ defmodule Amur.Page do
   defp provider_icon(provider) do
     case provider_logo(provider) do
       {:svg, markup} -> inline_svg(markup)
-      {:path, path} -> ~s|<img src="#{path}" alt="" />|
+      {:path, path} -> ~s|<img src="#{Plug.HTML.html_escape(path)}" alt="" />|
       :error -> ""
     end
   end
@@ -245,20 +245,15 @@ defmodule Amur.Page do
   #   * `{:path, url}` - a URL served by the host application
   #   * a bare string - a local file when one exists at that path, otherwise a URL
   #
-  # When nothing is configured the page falls back to the first provider that
-  # has an icon, so it still shows something. The provider logo is preserved in
-  # its own form: a `{:path, url}` logo stays an image rather than being wrapped
-  # as SVG, so it keeps the page-logo styling instead of its intrinsic size.
-  defp logo(providers) do
+  # When nothing is configured the page shows no logo at all, so it never
+  # displays another company's mark by default. A configured logo is preserved
+  # in its own form: a `{:path, url}` logo stays an image rather than being
+  # wrapped as SVG, so it keeps the page-logo styling instead of its intrinsic
+  # size.
+  defp logo(_providers) do
     case resolve_logo(Application.get_env(:amur, :logo)) do
-      :error ->
-        case provider_logo(fallback_logo(providers)) do
-          :error -> {:svg, ""}
-          resolved -> resolved
-        end
-
-      resolved ->
-        resolved
+      :error -> :none
+      resolved -> resolved
     end
   end
 
@@ -283,12 +278,6 @@ defmodule Amur.Page do
       {:ok, markup} -> {:svg, markup}
       {:error, _reason} -> :error
     end
-  end
-
-  # Prefers a provider-specific logo, falling back to the first provider that
-  # has one so the page always shows an icon when any asset is available.
-  defp fallback_logo(providers) do
-    Enum.find(providers, hd(providers), &(provider_logo(&1) != :error))
   end
 
   defp asset_file(provider), do: Path.join(@static_dir, "#{provider}.svg")

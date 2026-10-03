@@ -46,6 +46,22 @@ defmodule Amur.PageTest do
     def logo, do: {:path, "/images/custom.svg"}
   end
 
+  defmodule InjectingLogoProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+
+    @impl true
+    def logo, do: {:path, ~s|/x.svg" onerror="alert(1)|}
+  end
+
   setup do
     previous = %{
       providers: Application.get_env(:amur, :providers),
@@ -105,8 +121,8 @@ defmodule Amur.PageTest do
     end
 
     # Icons are inlined so they can follow the page's text colour: one per
-    # provider plus the logo fallback.
-    assert length(Regex.scan(~r/<svg/, conn.resp_body)) == 4
+    # provider, with no page logo by default.
+    assert length(Regex.scan(~r/<svg/, conn.resp_body)) == 3
     assert conn.resp_body =~ "Sign in to Acme"
   end
 
@@ -242,6 +258,20 @@ defmodule Amur.PageTest do
     assert conn.resp_body =~ ~r/html,\s*body\s*\{[^}]*background:\s*var\(--amur-bg\)/
   end
 
+  test "gives the logo wrapper a display mode so its box is honoured" do
+    conn =
+      Plug.Test.conn(:get, "/auth/amur.css")
+      |> Plug.Test.init_test_session(%{})
+      |> then(&Amur.Router.call(%{&1 | path_info: ["amur.css"]}, []))
+
+    # The inline-SVG logo is wrapped in a <span>, and width/height do not apply
+    # to a non-replaced inline box, so the 36x36 sizing would be ignored without
+    # an explicit display mode.
+    assert conn.resp_body =~ ~r/\.amur-logo\s*\{[^}]*display:\s*block/
+    assert conn.resp_body =~ ~r/\.amur-logo\s*\{[^}]*width:\s*36px/
+    assert conn.resp_body =~ ~r/\.amur-logo\s*\{[^}]*height:\s*36px/
+  end
+
   test "serves provider icons with the correct content type" do
     conn =
       Plug.Test.conn(:get, "/auth/github.svg")
@@ -288,14 +318,11 @@ defmodule Amur.PageTest do
     assert render_page().resp_body =~ ~s|href="/auth/discord"|
   end
 
-  test "falls back to a provider icon when no logo is configured" do
+  test "shows no logo when none is configured" do
     Application.delete_env(:amur, :logo)
     Application.put_env(:amur, :providers, github: [], google: [])
 
-    markup = logo_markup(render_page().resp_body)
-
-    assert markup =~ "<svg"
-    assert markup =~ ~s|fill="currentColor"|
+    assert logo_markup(render_page().resp_body) == ""
   end
 
   test "uses a configured logo path" do
@@ -303,6 +330,16 @@ defmodule Amur.PageTest do
     Application.put_env(:amur, :providers, github: [])
 
     assert logo_markup(render_page().resp_body) =~ ~s|src="/images/logo.svg"|
+  end
+
+  test "escapes a configured logo path" do
+    Application.put_env(:amur, :logo, {:path, ~s|/logo.svg" onerror="alert(1)|})
+    Application.put_env(:amur, :providers, github: [])
+
+    markup = logo_markup(render_page().resp_body)
+
+    assert markup =~ ~s|src="/logo.svg&quot; onerror=&quot;alert(1)"|
+    refute markup =~ ~s|" onerror="|
   end
 
   test "accepts a bare string as a logo path" do
@@ -328,11 +365,11 @@ defmodule Amur.PageTest do
     assert logo_markup(render_page().resp_body) =~ ~s|<circle cx="4" cy="4" r="4"/>|
   end
 
-  test "falls back to a provider icon when the logo file is missing" do
+  test "shows no logo when the logo file is missing" do
     Application.put_env(:amur, :logo, {:file, "/nonexistent/logo.svg"})
     Application.put_env(:amur, :providers, github: [])
 
-    assert logo_markup(render_page().resp_body) =~ "<svg"
+    assert logo_markup(render_page().resp_body) == ""
   end
 
   test "renders an inline SVG logo as markup" do
@@ -343,11 +380,11 @@ defmodule Amur.PageTest do
     assert logo_markup(render_page().resp_body) =~ markup
   end
 
-  test "ignores an invalid logo value and falls back to a provider icon" do
+  test "ignores an invalid logo value and shows no logo" do
     Application.put_env(:amur, :logo, :not_a_logo)
     Application.put_env(:amur, :providers, github: [])
 
-    assert logo_markup(render_page().resp_body) =~ "<svg"
+    assert logo_markup(render_page().resp_body) == ""
   end
 
   test "renders a custom provider's inline SVG logo on its button" do
@@ -368,21 +405,28 @@ defmodule Amur.PageTest do
     assert body =~ ~s|<img src="/images/custom.svg" alt="" />|
   end
 
-  test "uses a custom provider's logo as the page logo fallback" do
+  test "escapes a custom provider's logo path on its button" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.InjectingLogoProvider)
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|src="/x.svg&quot; onerror=&quot;alert(1)"|
+    refute body =~ ~s|" onerror="|
+  end
+
+  test "shows no page logo for a custom provider with a logo" do
     Application.delete_env(:amur, :logo)
     Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
 
-    assert logo_markup(render_page().resp_body) =~ ~s|<circle cx="12" cy="12" r="10"/>|
+    assert logo_markup(render_page().resp_body) == ""
   end
 
-  test "preserves a path-based provider logo as the page logo fallback" do
+  test "shows no page logo for a custom provider with a path logo" do
     Application.delete_env(:amur, :logo)
     Application.put_env(:amur, :providers, custom: Amur.PageTest.PathLogoProvider)
 
-    markup = logo_markup(render_page().resp_body)
-
-    assert markup =~ ~s|<img class="amur-logo" src="/images/custom.svg"|
-    refute markup =~ "<span class=\"amur-logo\""
+    assert logo_markup(render_page().resp_body) == ""
   end
 
   test "renders no icon for a custom provider without a logo" do
