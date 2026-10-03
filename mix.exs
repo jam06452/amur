@@ -1,10 +1,13 @@
 defmodule Amur.MixProject do
   use Mix.Project
 
+  @version "0.3.4"
+  @source_url "https://github.com/jam06452/amur"
+
   def project do
     [
       app: :amur,
-      version: "0.3.4",
+      version: @version,
       elixir: "~> 1.15",
       description:
         "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
@@ -23,16 +26,57 @@ defmodule Amur.MixProject do
 
   defp docs do
     [
-      main: "readme",
-      extras: ["README.md"],
+      main: "overview",
       assets: %{"assets" => "assets"},
-      source_url: "https://github.com/jam06452/amur",
+      source_url: @source_url,
+      source_ref: "v#{@version}",
       homepage_url: "https://hex.pm/packages/amur",
       canonical: "https://hexdocs.pm/amur",
-      groups_for_modules: [
-        Providers: [
-          ~r/^Amur\.Providers(\.|$)/
-        ]
+      extra_section: "GUIDES",
+      api_reference: false,
+      extras: extras(),
+      groups_for_extras: groups_for_extras(),
+      groups_for_modules: groups_for_modules()
+    ]
+  end
+
+  defp extras do
+    [
+      # Introduction
+      "guides/overview.md",
+      "guides/introduction/installation.md",
+
+      # Learning
+      "guides/learning/providers.md",
+      "guides/learning/configuration.md",
+      "guides/learning/oauth_flow.md",
+      "guides/learning/custom_providers.md",
+      "guides/learning/sign_in_page.md"
+    ]
+  end
+
+  defp groups_for_extras do
+    [
+      Introduction: ~r{guides/(overview|introduction/.+)\.md},
+      Learning: ~r{guides/learning/.+}
+    ]
+  end
+
+  defp groups_for_modules do
+    [
+      Providers: [
+        ~r/^Amur\.Providers(\.|$)/
+      ],
+      Core: [
+        Amur,
+        Amur.Router,
+        Amur.Controller,
+        Amur.Page
+      ],
+      Extending: [
+        Amur.Provider,
+        Amur.Callback,
+        Amur.User
       ]
     ]
   end
