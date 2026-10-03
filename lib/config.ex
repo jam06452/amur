@@ -49,6 +49,16 @@ defmodule Amur.Config do
     |> Enum.sort()
   end
 
+  # Returns the provider names configured for the application, in the order
+  # they were declared. Only names that resolve to a usable provider are
+  # returned, so the sign-in page never links to a provider that would fail.
+  def configured_providers do
+    :amur
+    |> Application.get_env(:providers, [])
+    |> Keyword.keys()
+    |> Enum.filter(&match?({:ok, _}, resolve(&1)))
+  end
+
   # Resolves a provider name supplied by a router or application.
   #
   # Binary names are converted only to existing atoms, preventing arbitrary
