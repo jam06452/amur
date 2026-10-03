@@ -366,6 +366,35 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert length(Regex.scan(~r/forward\(?\s*"\/"\s*,\s*Amur\.Router/, router)) == 2
   end
 
+  test "adds the /auth mount when Amur is only forwarded in a nested scope" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth", alias: false do
+        pipe_through :browser
+
+        scope "/nested", alias: false do
+          forward "/", Amur.Router
+        end
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/"\s*,\s*Amur\.Router/, router)) == 2
+  end
+
   test "page-only mode leaves general configuration untouched" do
     existing = %{
       "config/runtime.exs" => """

@@ -348,17 +348,32 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp scope_contains_amur_forward?(scope_ast) do
-    {_ast, found?} =
-      Macro.prewalk(scope_ast, false, fn
-        {:forward, _, [path, router]} = node, acc ->
-          {node, acc || (literal_string(path) == "/" && amur_router_ast?(router))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found?
+    scope_ast
+    |> scope_body()
+    |> Enum.any?(&root_amur_forward?/1)
   end
+
+  # The statements directly inside a `scope` block, without descending into
+  # nested scopes. A `forward` in a nested scope is mounted at a deeper path
+  # (for example `/auth/nested`), so it must not satisfy the top-level `/auth`
+  # mount check. `Macro.prewalk/3` cannot express this: returning a node
+  # unchanged still descends into it, so nested scopes have to be stopped by
+  # not walking them at all.
+  defp scope_body({:scope, _, [_path, _opts, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body({:scope, _, [_path, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body(_other), do: []
+
+  defp scope_statements({:__block__, _, statements}), do: statements
+  defp scope_statements(statement), do: [statement]
+
+  defp root_amur_forward?({:forward, _, [path, router]}),
+    do: literal_string(path) == "/" && amur_router_ast?(router)
+
+  defp root_amur_forward?(_other), do: false
 
   # Sourceror wraps string literals in a `{:__block__, meta, [value]}` node, so a
   # plain `"/auth"` pattern would not match the parsed router source.
