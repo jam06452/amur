@@ -107,9 +107,39 @@ defmodule Amur.Page do
   # text colour and stay visible in dark mode. A provider without a bundled icon
   # falls back to an empty string, leaving the button label on its own.
   defp provider_icon(provider) do
+    case provider_logo(provider) do
+      {:svg, markup} -> inline_svg(markup)
+      {:path, path} -> ~s|<img src="#{path}" alt="" />|
+      :error -> ""
+    end
+  end
+
+  # Resolves the logo for a single provider.
+  #
+  # A custom provider module can supply its own logo through the `logo/0`
+  # callback, in any of the forms accepted by the `:logo` configuration. When
+  # the module returns `:error`, or the provider is a built-in, the bundled
+  # `priv/static/<provider>.svg` asset is used instead.
+  defp provider_logo(provider) do
+    case custom_logo(provider) do
+      :error -> bundled_logo(provider)
+      resolved -> resolved
+    end
+  end
+
+  defp custom_logo(provider) do
+    with {:ok, {module, _config}} <- Amur.Config.resolve(provider),
+         true <- function_exported?(module, :logo, 0) do
+      resolve_logo(module.logo())
+    else
+      _ -> :error
+    end
+  end
+
+  defp bundled_logo(provider) do
     case File.read(asset_file(provider)) do
-      {:ok, markup} -> inline_svg(markup)
-      {:error, _reason} -> ""
+      {:ok, markup} -> {:svg, markup}
+      {:error, _reason} -> :error
     end
   end
 
@@ -216,32 +246,26 @@ defmodule Amur.Page do
   #   * a bare string - a local file when one exists at that path, otherwise a URL
   #
   # When nothing is configured the page falls back to the first provider that
-  # has a bundled icon, so it still shows something.
+  # has an icon, so it still shows something.
   defp logo(providers) do
-    case resolve_logo() do
+    case resolve_logo(Application.get_env(:amur, :logo)) do
       :error -> {:svg, provider_icon(fallback_logo(providers))}
       resolved -> resolved
     end
   end
 
-  defp resolve_logo do
-    case Application.get_env(:amur, :logo) do
-      {:svg, markup} when is_binary(markup) ->
-        {:svg, markup}
+  # Normalizes a logo value into `{:svg, markup}` or `{:path, url}`, or `:error`
+  # when it is missing or unusable. Shared by the page-level `:logo`
+  # configuration and the per-provider `logo/0` callback.
+  defp resolve_logo({:svg, markup}) when is_binary(markup), do: {:svg, markup}
+  defp resolve_logo({:file, path}) when is_binary(path), do: read_logo_file(path)
+  defp resolve_logo({:path, path}) when is_binary(path), do: {:path, path}
 
-      {:file, path} when is_binary(path) ->
-        read_logo_file(path)
-
-      {:path, path} when is_binary(path) ->
-        {:path, path}
-
-      path when is_binary(path) ->
-        if File.regular?(path), do: read_logo_file(path), else: {:path, path}
-
-      _ ->
-        :error
-    end
+  defp resolve_logo(path) when is_binary(path) do
+    if File.regular?(path), do: read_logo_file(path), else: {:path, path}
   end
+
+  defp resolve_logo(_other), do: :error
 
   # Inlines a local SVG file so the page needs no extra request. A missing or
   # unreadable file falls back to the provider icon rather than failing the
@@ -256,7 +280,7 @@ defmodule Amur.Page do
   # Prefers a provider-specific logo, falling back to the first provider that
   # has one so the page always shows an icon when any asset is available.
   defp fallback_logo(providers) do
-    Enum.find(providers, hd(providers), &File.regular?(asset_file(&1)))
+    Enum.find(providers, hd(providers), &(provider_logo(&1) != :error))
   end
 
   defp asset_file(provider), do: Path.join(@static_dir, "#{provider}.svg")
