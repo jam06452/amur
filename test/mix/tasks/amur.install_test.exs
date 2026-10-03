@@ -284,4 +284,32 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     refute Map.has_key?(igniter.assigns[:test_files], "config/runtime.exs")
   end
+
+  test "--page records the application name for the sign-in page" do
+    igniter = apply_install(["--app", "sample", "--page", "--yes"])
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ ~s|app_name: "sample"|
+  end
+
+  test "--page points the next steps at the sign-in page" do
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(["--app", "sample", "--page", "--yes"], %{})
+
+    assert Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+    assert Enum.any?(notices, &String.contains?(&1, "/auth"))
+  end
+
+  test "omits the app name when --page is not passed" do
+    igniter = apply_install(["--app", "sample", "--yes"])
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    refute runtime =~ "app_name:"
+  end
+
+  test "--page does not write config when --no-config is set" do
+    igniter = apply_install(["--app", "sample", "--page", "--no-config", "--yes"])
+
+    refute Map.has_key?(igniter.assigns[:test_files], "config/runtime.exs")
+  end
 end
