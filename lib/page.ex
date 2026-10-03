@@ -27,7 +27,44 @@ defmodule Amur.Page do
   @external_resource @template
 
   require EEx
-  EEx.function_from_file(:defp, :render_page, @template, [:providers, :app_name, :logo, :base])
+
+  EEx.function_from_file(:defp, :render_page, @template, [
+    :providers,
+    :app_name,
+    :logo,
+    :base,
+    :icon,
+    :label
+  ])
+
+  # Display names for providers whose atom does not title-case cleanly, either
+  # because it contains an underscore or because the brand uses specific
+  # capitalisation. Providers not listed here fall back to title case.
+  @provider_labels %{
+    auth0: "Auth0",
+    azure_ad: "Azure AD",
+    basecamp: "Basecamp",
+    bitbucket: "Bitbucket",
+    digital_ocean: "DigitalOcean",
+    discord: "Discord",
+    facebook: "Facebook",
+    github: "GitHub",
+    gitlab: "GitLab",
+    google: "Google",
+    hackclub: "Hack Club",
+    instagram: "Instagram",
+    line: "LINE",
+    linkedin: "LinkedIn",
+    slack: "Slack",
+    spotify: "Spotify",
+    strava: "Strava",
+    stripe: "Stripe",
+    telegram: "Telegram",
+    twitch: "Twitch",
+    twitter: "Twitter (X)",
+    vk: "VK",
+    zitadel: "Zitadel"
+  }
 
   @doc """
   Renders the sign-in page for the configured providers.
@@ -49,11 +86,63 @@ defmodule Amur.Page do
 
       providers ->
         base = base_path(conn)
-        body = render_page(providers, app_name(), logo(providers, base), base)
+
+        body =
+          render_page(
+            providers,
+            app_name(),
+            logo(providers),
+            base,
+            &provider_icon/1,
+            &provider_label/1
+          )
 
         conn
         |> put_resp_content_type("text/html")
         |> send_resp(200, body)
+    end
+  end
+
+  # Provider icons are inlined so their `currentColor` fills follow the page's
+  # text colour and stay visible in dark mode. A provider without a bundled icon
+  # falls back to an empty string, leaving the button label on its own.
+  defp provider_icon(provider) do
+    case File.read(asset_file(provider)) do
+      {:ok, markup} -> inline_svg(markup)
+      {:error, _reason} -> ""
+    end
+  end
+
+  # Human-readable provider name for the button label.
+  defp provider_label(provider) do
+    Map.get_lazy(@provider_labels, provider, fn ->
+      provider
+      |> to_string()
+      |> String.split("_")
+      |> Enum.map_join(" ", &String.capitalize/1)
+    end)
+  end
+
+  # Strips the XML declaration and comments so the markup is valid when inlined
+  # into an HTML document, and drops the fixed width/height from the root `<svg>`
+  # so CSS controls the size. Only the opening tag is touched: child elements
+  # such as `<rect>` carry their own width/height, which must be preserved.
+  defp inline_svg(markup) do
+    markup
+    |> String.replace(~r/^\s*<\?xml[^>]*\?>/m, "")
+    |> String.replace(~r/<!--.*?-->/s, "")
+    |> strip_root_dimensions()
+    |> String.trim()
+  end
+
+  defp strip_root_dimensions(markup) do
+    case Regex.run(~r/<svg\b[^>]*>/s, markup) do
+      [tag] ->
+        cleaned = String.replace(tag, ~r/\s(?:width|height)="[^"]*"/, "")
+        String.replace(markup, tag, cleaned, global: false)
+
+      nil ->
+        markup
     end
   end
 
@@ -128,9 +217,9 @@ defmodule Amur.Page do
   #
   # When nothing is configured the page falls back to the first provider that
   # has a bundled icon, so it still shows something.
-  defp logo(providers, base) do
+  defp logo(providers) do
     case resolve_logo() do
-      :error -> {:path, "#{base}/#{fallback_logo(providers)}.svg"}
+      :error -> {:svg, provider_icon(fallback_logo(providers))}
       resolved -> resolved
     end
   end

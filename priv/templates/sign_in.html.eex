@@ -15,8 +15,8 @@
       <nav class="amur-providers--list" aria-label="Sign-in providers">
         <%= for provider <- providers do %>
           <a class="amur-provider" href="<%= base %>/<%= provider %>">
-            <img src="<%= base %>/<%= provider %>.svg" alt="" />
-            <span>Continue with <%= provider |> to_string() |> String.capitalize() %></span>
+            <span class="amur-provider-icon" aria-hidden="true"><%= icon.(provider) %></span>
+            <span>Continue with <%= label.(provider) %></span>
           </a>
         <% end %>
       </nav>
@@ -24,8 +24,8 @@
       <nav class="amur-providers--grid" aria-label="Sign-in providers">
         <%= for provider <- providers do %>
           <a class="amur-provider" href="<%= base %>/<%= provider %>">
-            <img src="<%= base %>/<%= provider %>.svg" alt="" />
-            <span>Continue with <%= provider |> to_string() |> String.capitalize() %></span>
+            <span class="amur-provider-icon" aria-hidden="true"><%= icon.(provider) %></span>
+            <span>Continue with <%= label.(provider) %></span>
           </a>
         <% end %>
       </nav>

@@ -23,6 +23,15 @@
   }
 }
 
+/* The page is served standalone, so it resets the document box itself rather
+   than relying on the host application's stylesheet. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--amur-bg);
+}
+
 .amur-page {
   box-sizing: border-box;
   min-height: 100vh;
@@ -105,9 +114,18 @@
   outline-offset: 2px;
 }
 
-.amur-provider img {
+.amur-provider-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
+  flex: none;
+}
+
+.amur-provider-icon svg {
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
@@ -142,13 +160,13 @@
   border-radius: 10px;
 }
 
-.amur-providers--grid .amur-provider img {
+.amur-providers--grid .amur-provider-icon {
   width: 22px;
   height: 22px;
 }
 
 /* Label is only visible in list layout, but stays available to screen readers */
-.amur-providers--grid .amur-provider span {
+.amur-providers--grid .amur-provider > span:not(.amur-provider-icon) {
   position: absolute;
   width: 1px;
   height: 1px;
