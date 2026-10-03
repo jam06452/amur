@@ -105,4 +105,28 @@ defmodule Amur.ConfigTest do
     assert {:ok, {_module, config}} = Amur.Config.resolve(:telegram)
     assert config[:authorization_params] == [scope: "openid"]
   end
+
+  test "configured_providers/0 returns configured provider names in order" do
+    Application.put_env(:amur, :providers, github: [], google: [], discord: [])
+
+    assert Amur.Config.configured_providers() == [:github, :google, :discord]
+  end
+
+  test "configured_providers/0 omits providers that do not resolve" do
+    Application.put_env(:amur, :providers, github: [], nope: [])
+
+    assert Amur.Config.configured_providers() == [:github]
+  end
+
+  test "configured_providers/0 includes custom provider modules" do
+    Application.put_env(:amur, :providers, custom: Amur.ConfigTest.CustomProvider)
+
+    assert Amur.Config.configured_providers() == [:custom]
+  end
+
+  test "configured_providers/0 returns an empty list when nothing is configured" do
+    Application.put_env(:amur, :providers, [])
+
+    assert Amur.Config.configured_providers() == []
+  end
 end

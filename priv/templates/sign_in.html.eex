@@ -4,7 +4,6 @@
   <section class="amur-card">
     <%= case logo do %>
       <% :none -> %>
-        <span class="amur-logo" aria-hidden="true"></span>
       <% {:svg, markup} -> %>
         <span class="amur-logo" aria-hidden="true"><%= markup %></span>
       <% {:path, path} -> %>

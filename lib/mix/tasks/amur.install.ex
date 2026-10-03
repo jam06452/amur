@@ -75,7 +75,7 @@ defmodule Mix.Tasks.Amur.Install do
     {igniter, web_module} = resolve_web_module(igniter, app_name, opts, phoenix?, router)
 
     providers = resolve_providers(opts)
-    validate_controller_options!(igniter, opts, web_module, phoenix?)
+    validate_controller_options!(igniter, opts, web_module)
 
     igniter
     |> maybe_add_controller(opts, web_module, phoenix?)
@@ -146,25 +146,24 @@ defmodule Mix.Tasks.Amur.Install do
     end
   end
 
-  defp validate_controller_options!(igniter, opts, web_module, phoenix?) do
+  defp validate_controller_options!(igniter, opts, web_module) do
     if opts[:controller] == false && opts[:config] != false && not page_only?(opts) do
       controller_module = Module.concat([web_module, AuthController])
 
-      # The controller may live at the conventional `controllers/` path the
-      # installer generates, or wherever Igniter would place the module. Both
-      # are accepted so an existing controller is recognized either way.
-      target_paths = [
-        controller_path(web_module, phoenix?),
-        ProjectModule.proper_location(igniter, controller_module)
-      ]
-
-      unless Enum.any?(target_paths, &Igniter.exists?(igniter, &1)) do
+      unless controller_exists?(igniter, controller_module, web_module) do
         Mix.raise(
           "--no-controller cannot be combined with config generation unless " <>
             "#{inspect(controller_module)} already exists or --no-config is also supplied."
         )
       end
     end
+  end
+
+  # The controller may live at the path this task generates or anywhere else the
+  # project chose, so both are checked before refusing to wire the callbacks.
+  defp controller_exists?(igniter, controller_module, web_module) do
+    Igniter.exists?(igniter, controller_path(web_module, true)) or
+      match?({:ok, _}, ProjectModule.find_module(igniter, controller_module))
   end
 
   defp add_controller(igniter, web_module, phoenix?) do
@@ -313,15 +312,17 @@ defmodule Mix.Tasks.Amur.Install do
   # Only a `forward "/", Amur.Router` inside the `/auth` scope counts: a project
   # that forwards Amur somewhere else (for example `/oauth`) still needs the
   # documented `/auth` mount, so a whole-file match would wrongly skip it.
-  # The router is always one `Phoenix.select_router/1` just found, so the module
-  # lookup cannot fail here.
   defp phoenix_router_mounted?(igniter, router) do
-    {_igniter, _source, zipper} = Igniter.Project.Module.find_module!(igniter, router)
+    case Igniter.Project.Module.find_module(igniter, router) do
+      {:ok, {_igniter, _source, zipper}} ->
+        zipper
+        |> Zipper.topmost()
+        |> Zipper.node()
+        |> auth_scope_amur_forward?()
 
-    zipper
-    |> Zipper.topmost()
-    |> Zipper.node()
-    |> auth_scope_amur_forward?()
+      _ ->
+        false
+    end
   end
 
   defp auth_scope_amur_forward?(ast) do
@@ -341,21 +342,32 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp scope_contains_amur_forward?(scope_ast, aliases) do
-    {_ast, found?} =
-      Macro.prewalk(scope_ast, false, fn
-        {:forward, _, [path, router]} = node, acc ->
-          matches? =
-            literal_string(path) == "/" and
-              resolve_forward_target(router, aliases) == Amur.Router
-
-          {node, acc or matches?}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found?
+    scope_ast
+    |> scope_body()
+    |> Enum.any?(&root_amur_forward?(&1, aliases))
   end
+
+  # The statements directly inside a `scope` block, without descending into
+  # nested scopes. A `forward` in a nested scope is mounted at a deeper path
+  # (for example `/auth/nested`), so it must not satisfy the top-level `/auth`
+  # mount check. `Macro.prewalk/3` cannot express this: returning a node
+  # unchanged still descends into it, so nested scopes have to be stopped by
+  # not walking them at all.
+  defp scope_body({:scope, _, [_path, _opts, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body({:scope, _, [_path, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body(_other), do: []
+
+  defp scope_statements({:__block__, _, statements}), do: statements
+  defp scope_statements(statement), do: [statement]
+
+  defp root_amur_forward?({:forward, _, [path, router]}, aliases),
+    do: literal_string(path) == "/" && resolve_forward_target(router, aliases) == Amur.Router
+
+  defp root_amur_forward?(_other, _aliases), do: false
 
   # Sourceror wraps string literals in a `{:__block__, meta, [value]}` node, so a
   # plain `"/auth"` pattern would not match the parsed router source.

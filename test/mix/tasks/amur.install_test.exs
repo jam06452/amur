@@ -366,6 +366,35 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert length(Regex.scan(~r/forward\(?\s*"\/"\s*,\s*Amur\.Router/, router)) == 2
   end
 
+  test "adds the /auth mount when Amur is only forwarded in a nested scope" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth", alias: false do
+        pipe_through :browser
+
+        scope "/nested", alias: false do
+          forward "/", Amur.Router
+        end
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/"\s*,\s*Amur\.Router/, router)) == 2
+  end
+
   test "page-only mode leaves general configuration untouched" do
     existing = %{
       "config/runtime.exs" => """
@@ -1343,5 +1372,79 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     router = igniter.assigns[:test_files]["lib/sample/router.ex"]
     assert router =~ ~s|forward("/auth", to: Amur.Router)|
+  end
+
+  test "recognizes a mount in a scope declared without options" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth" do
+        pipe_through :browser
+        forward "/", Amur.Router
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
+
+  test "recognizes a mount in a scope whose body is a single statement" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth", alias: false do
+        forward "/", Amur.Router
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
+
+  test "ignores a scope whose body is not a do block" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth", alias: false, do: :nothing
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert router =~ ~s|forward("/", Amur.Router)|
   end
 end

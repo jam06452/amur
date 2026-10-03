@@ -209,7 +209,7 @@ defmodule Amur.Page do
   defp safe_asset_path(path) do
     relative = path |> Enum.join("/") |> Path.basename()
 
-    if relative == "" or relative == ".." do
+    if relative == "" do
       :error
     else
       file = Path.join(@static_dir, relative)
@@ -245,28 +245,16 @@ defmodule Amur.Page do
   #   * `{:path, url}` - a URL served by the host application
   #   * a bare string - a local file when one exists at that path, otherwise a URL
   #
-  # When nothing is configured the page falls back to the first provider that
-  # has an icon, so the heading is never left bare. A configured logo is
-  # preserved in its own form: a `{:path, url}` logo stays an image rather than
-  # being wrapped as SVG, so it keeps the page-logo styling instead of its
-  # intrinsic size.
-  defp logo(providers) do
+  # When nothing is configured the page shows no logo at all, so it never
+  # displays another company's mark by default. A configured logo is preserved
+  # in its own form: a `{:path, url}` logo stays an image rather than being
+  # wrapped as SVG, so it keeps the page-logo styling instead of its intrinsic
+  # size.
+  defp logo(_providers) do
     case resolve_logo(Application.get_env(:amur, :logo)) do
-      :error -> provider_logo_fallback(providers)
+      :error -> :none
       resolved -> resolved
     end
-  end
-
-  # The first provider with a usable logo, used as the page logo when no
-  # page-level logo is configured. Returns `:none` when no provider has one, so
-  # the template renders an empty wrapper rather than another company's mark.
-  defp provider_logo_fallback(providers) do
-    Enum.find_value(providers, :none, fn provider ->
-      case provider_logo(provider) do
-        :error -> nil
-        resolved -> resolved
-      end
-    end)
   end
 
   # Normalizes a logo value into `{:svg, markup}` or `{:path, url}`, or `:error`
