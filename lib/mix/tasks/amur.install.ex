@@ -158,15 +158,21 @@ defmodule Mix.Tasks.Amur.Install do
   defp validate_controller_options!(igniter, opts, web_module) do
     if opts[:controller] == false && opts[:config] != false do
       controller_module = Module.concat([web_module, AuthController])
-      target_path = ProjectModule.proper_location(igniter, controller_module)
 
-      unless Igniter.exists?(igniter, target_path) do
+      unless controller_exists?(igniter, controller_module, web_module) do
         Mix.raise(
           "--no-controller cannot be combined with config generation unless " <>
             "#{inspect(controller_module)} already exists or --no-config is also supplied."
         )
       end
     end
+  end
+
+  # The controller may live at the path this task generates or anywhere else the
+  # project chose, so both are checked before refusing to wire the callbacks.
+  defp controller_exists?(igniter, controller_module, web_module) do
+    Igniter.exists?(igniter, controller_path(web_module, true)) or
+      match?({:ok, _}, ProjectModule.find_module(igniter, controller_module))
   end
 
   defp add_controller(igniter, web_module, phoenix?) do
@@ -259,26 +265,33 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_router(igniter, true, router) do
-    {igniter, has_browser_pipeline?} =
-      Phoenix.has_pipeline(igniter, router, :browser)
+    if phoenix_router_mounted?(igniter, router) do
+      Igniter.add_notice(
+        igniter,
+        "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+      )
+    else
+      {igniter, has_browser_pipeline?} =
+        Phoenix.has_pipeline(igniter, router, :browser)
 
-    contents =
-      if has_browser_pipeline? do
-        """
-        pipe_through :browser
-        forward "/", Amur.Router
-        """
-      else
-        "forward \"/\", Amur.Router"
-      end
+      contents =
+        if has_browser_pipeline? do
+          """
+          pipe_through :browser
+          forward "/", Amur.Router
+          """
+        else
+          "forward \"/\", Amur.Router"
+        end
 
-    Phoenix.add_scope(
-      igniter,
-      "/auth",
-      contents,
-      router: router,
-      arg2: [alias: false]
-    )
+      Phoenix.add_scope(
+        igniter,
+        "/auth",
+        contents,
+        router: router,
+        arg2: [alias: false]
+      )
+    end
   end
 
   defp add_router(igniter, false, _router) do
@@ -299,6 +312,22 @@ defmodule Mix.Tasks.Amur.Install do
 
       [] ->
         Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch.")
+    end
+  end
+
+  # Detects an existing Amur mount so re-running the installer in a project that
+  # already has one does not add a second `forward` to the same router.
+  defp phoenix_router_mounted?(igniter, router) do
+    case Igniter.Project.Module.find_module(igniter, router) do
+      {:ok, {_igniter, _source, zipper}} ->
+        zipper
+        |> Zipper.topmost()
+        |> Zipper.node()
+        |> Sourceror.to_string()
+        |> String.contains?("Amur.Router")
+
+      _ ->
+        false
     end
   end
 
