@@ -191,6 +191,16 @@ defmodule Amur.PageTest do
     assert render_page().resp_body =~ "Sign in to your account"
   end
 
+  test "escapes the configured app name in the heading" do
+    Application.put_env(:amur, :app_name, "</h1><script>alert(1)</script>")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    refute body =~ "<script>"
+    assert body =~ "Sign in to &lt;/h1&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+  end
+
   test "responds with 404 when no providers are configured" do
     Application.put_env(:amur, :providers, [])
 

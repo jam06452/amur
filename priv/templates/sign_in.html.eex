@@ -8,7 +8,7 @@
       <% {:path, path} -> %>
         <img class="amur-logo" src="<%= path %>" alt="" />
     <% end %>
-    <h1 class="amur-title">Sign in to <%= app_name %></h1>
+    <h1 class="amur-title">Sign in to <%= Plug.HTML.html_escape(app_name) %></h1>
     <p class="amur-divider">Choose an account to continue</p>
 
     <%= if length(providers) <= 2 do %>
