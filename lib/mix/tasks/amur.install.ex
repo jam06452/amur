@@ -156,7 +156,7 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp validate_controller_options!(igniter, opts, web_module) do
-    if opts[:controller] == false && opts[:config] != false do
+    if opts[:controller] == false && opts[:config] != false && not page_only?(opts) do
       controller_module = Module.concat([web_module, AuthController])
 
       unless controller_exists?(igniter, controller_module, web_module) do
@@ -317,19 +317,54 @@ defmodule Mix.Tasks.Amur.Install do
 
   # Detects an existing Amur mount so re-running the installer in a project that
   # already has one does not add a second `forward` to the same router.
+  #
+  # Only a `forward "/", Amur.Router` inside the `/auth` scope counts: a project
+  # that forwards Amur somewhere else (for example `/oauth`) still needs the
+  # documented `/auth` mount, so a whole-file match would wrongly skip it.
   defp phoenix_router_mounted?(igniter, router) do
     case Igniter.Project.Module.find_module(igniter, router) do
       {:ok, {_igniter, _source, zipper}} ->
         zipper
         |> Zipper.topmost()
         |> Zipper.node()
-        |> Sourceror.to_string()
-        |> String.contains?("Amur.Router")
+        |> auth_scope_amur_forward?()
 
       _ ->
         false
     end
   end
+
+  defp auth_scope_amur_forward?(ast) do
+    {_ast, found?} =
+      Macro.prewalk(ast, false, fn
+        {:scope, _, [path | _]} = node, acc ->
+          {node, acc || (literal_string(path) == "/auth" && scope_contains_amur_forward?(node))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found?
+  end
+
+  defp scope_contains_amur_forward?(scope_ast) do
+    {_ast, found?} =
+      Macro.prewalk(scope_ast, false, fn
+        {:forward, _, [path, router]} = node, acc ->
+          {node, acc || (literal_string(path) == "/" && amur_router_ast?(router))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found?
+  end
+
+  # Sourceror wraps string literals in a `{:__block__, meta, [value]}` node, so a
+  # plain `"/auth"` pattern would not match the parsed router source.
+  defp literal_string({:__block__, _meta, [value]}) when is_binary(value), do: value
+  defp literal_string(value) when is_binary(value), do: value
+  defp literal_string(_other), do: nil
 
   defp update_plug_router(zipper) do
     if has_auth_forward?(zipper) do
@@ -379,18 +414,26 @@ defmodule Mix.Tasks.Amur.Install do
     end
   end
 
+  # Page-only mode (`--page --no-router --no-controller`) records just the
+  # application name, so it must not rewrite the general configuration: doing so
+  # would add `base_url`, the dotenv loader and (when `--provider` was omitted)
+  # the default GitHub provider to an already configured project.
+  defp page_only?(opts) do
+    opts[:page] == true && opts[:router] == false && opts[:controller] == false
+  end
+
   defp maybe_add_config(igniter, opts, web_module, providers, phoenix?) do
-    if opts[:config] == false do
-      igniter
-    else
-      add_config(igniter, web_module, providers, phoenix?, opts[:controller] != false)
+    cond do
+      opts[:config] == false -> igniter
+      page_only?(opts) -> igniter
+      true -> add_config(igniter, web_module, providers, phoenix?, opts[:controller] != false)
     end
   end
 
   # The sign-in page is served by `Amur.Router` from Amur's own `priv/`, so
   # `--page` only needs to record the application name the page displays.
   defp maybe_add_page(igniter, opts, app_name) do
-    if opts[:page] && opts[:config] != false do
+    if opts[:page] == true && opts[:config] != false do
       ProjectConfig.configure(
         igniter,
         "runtime.exs",

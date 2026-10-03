@@ -339,6 +339,58 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
   end
 
+  test "adds the /auth mount when Amur is forwarded at a different path" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/oauth", alias: false do
+        pipe_through :browser
+        forward "/", Amur.Router
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert router =~ ~s|scope "/auth", alias: false do|
+    assert length(Regex.scan(~r/forward\(?\s*"\/"\s*,\s*Amur\.Router/, router)) == 2
+  end
+
+  test "page-only mode leaves general configuration untouched" do
+    existing = %{
+      "config/runtime.exs" => """
+      import Config
+
+      config :amur,
+        base_url: "https://example.com",
+        providers: [github: [client_id: "x", client_secret: "y"]]
+      """
+    }
+
+    igniter =
+      apply_install(
+        ["--page", "--no-router", "--no-controller", "--app", "sample", "--yes"],
+        existing
+      )
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ ~s|app_name: "sample"|
+    assert runtime =~ ~s|base_url: "https://example.com"|
+    refute runtime =~ "System.fetch_env!(\"BASE_URL\")"
+    refute runtime =~ "File.exists?(\".env\")"
+    refute runtime =~ "google: ["
+  end
+
   test "adds the page config to a project that already has Amur installed" do
     existing = %{
       "lib/sample_web/router.ex" => """
