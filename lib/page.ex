@@ -246,11 +246,19 @@ defmodule Amur.Page do
   #   * a bare string - a local file when one exists at that path, otherwise a URL
   #
   # When nothing is configured the page falls back to the first provider that
-  # has an icon, so it still shows something.
+  # has an icon, so it still shows something. The provider logo is preserved in
+  # its own form: a `{:path, url}` logo stays an image rather than being wrapped
+  # as SVG, so it keeps the page-logo styling instead of its intrinsic size.
   defp logo(providers) do
     case resolve_logo(Application.get_env(:amur, :logo)) do
-      :error -> {:svg, provider_icon(fallback_logo(providers))}
-      resolved -> resolved
+      :error ->
+        case provider_logo(fallback_logo(providers)) do
+          :error -> {:svg, ""}
+          resolved -> resolved
+        end
+
+      resolved ->
+        resolved
     end
   end
 

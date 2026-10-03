@@ -365,6 +365,16 @@ defmodule Amur.PageTest do
     assert logo_markup(render_page().resp_body) =~ ~s|<circle cx="12" cy="12" r="10"/>|
   end
 
+  test "preserves a path-based provider logo as the page logo fallback" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.PathLogoProvider)
+
+    markup = logo_markup(render_page().resp_body)
+
+    assert markup =~ ~s|<img class="amur-logo" src="/images/custom.svg"|
+    refute markup =~ "<span class=\"amur-logo\""
+  end
+
   test "renders no icon for a custom provider without a logo" do
     Application.delete_env(:amur, :logo)
     Application.put_env(:amur, :providers, custom: Amur.PageTest.CustomProvider)

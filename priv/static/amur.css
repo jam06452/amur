@@ -123,10 +123,12 @@ body {
   flex: none;
 }
 
-.amur-provider-icon svg {
+.amur-provider-icon svg,
+.amur-provider-icon img {
   width: 100%;
   height: 100%;
   display: block;
+  object-fit: contain;
 }
 
 /* Layout A: 1 or 2 providers, full-width labelled buttons */
