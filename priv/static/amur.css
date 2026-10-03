@@ -1,0 +1,185 @@
+/* Amur sign-in page: pure CSS, no JS */
+:root {
+  --amur-bg: #ffffff;
+  --amur-fg: #1a1a1a;
+  --amur-muted: #444444;
+  --amur-line: #1a1a1a;
+  --amur-btn-bg: #f6f6f7;
+  --amur-btn-border: #e2e2e4;
+  --amur-btn-hover: #ececee;
+  --amur-focus: #2563eb;
+  --amur-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --amur-bg: #121212;
+    --amur-fg: #f2f2f2;
+    --amur-muted: #bdbdbd;
+    --amur-line: #f2f2f2;
+    --amur-btn-bg: #1e1e20;
+    --amur-btn-border: #333336;
+    --amur-btn-hover: #28282b;
+  }
+}
+
+/* The page is served standalone, so it resets the document box itself rather
+   than relying on the host application's stylesheet. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--amur-bg);
+}
+
+.amur-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--amur-bg);
+  color: var(--amur-fg);
+  font-family: var(--amur-font);
+}
+
+.amur-card {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.amur-logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 14px;
+}
+
+/* Inline SVG logos are wrapped in a span, so the markup fills the box. */
+.amur-logo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.amur-title {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.amur-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 18px;
+  font-size: 0.7rem;
+  color: var(--amur-muted);
+  white-space: nowrap;
+}
+
+.amur-divider::before,
+.amur-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--amur-line);
+}
+
+/* Shared provider button */
+.amur-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: var(--amur-btn-bg);
+  border: 1px solid var(--amur-btn-border);
+  color: var(--amur-fg);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: background 0.15s ease;
+}
+
+.amur-provider:hover {
+  background: var(--amur-btn-hover);
+}
+
+.amur-provider:focus-visible {
+  outline: 2px solid var(--amur-focus);
+  outline-offset: 2px;
+}
+
+.amur-provider-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.amur-provider-icon svg,
+.amur-provider-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+/* Layout A: 1 or 2 providers, full-width labelled buttons */
+.amur-providers--list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.amur-providers--list .amur-provider {
+  gap: 8px;
+  width: 100%;
+  height: 38px;
+  border-radius: 6px;
+}
+
+/* Layout B: 3+ providers, icon tiles, 3 per row, last row centred */
+.amur-providers--grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  /* 3 tiles (44px) + 2 gaps (12px) */
+  width: 156px;
+}
+
+.amur-providers--grid .amur-provider {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.amur-providers--grid .amur-provider-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Label is only visible in list layout, but stays available to screen readers */
+.amur-providers--grid .amur-provider > span:not(.amur-provider-icon) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amur-provider {
+    transition: none;
+  }
+}

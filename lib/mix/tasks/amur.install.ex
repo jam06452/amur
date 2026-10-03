@@ -33,7 +33,8 @@ defmodule Mix.Tasks.Amur.Install do
         all: :boolean,
         config: :boolean,
         router: :boolean,
-        controller: :boolean
+        controller: :boolean,
+        page: :boolean
       ],
       aliases: [
         p: :provider
@@ -48,6 +49,9 @@ defmodule Mix.Tasks.Amur.Install do
   `--provider` and `--all` options are mutually exclusive, and generated
   callbacks are wired only when a controller is requested. Multiple providers
   can be passed to `--provider` as a comma-separated list.
+
+  Passing `--page` also configures the application name used by the built-in
+  sign-in page, which `Amur.Router` serves at the mount point (`GET /auth`).
   """
   @impl Igniter.Mix.Task
   def igniter(igniter) do
@@ -77,6 +81,7 @@ defmodule Mix.Tasks.Amur.Install do
     |> maybe_add_controller(opts, web_module, phoenix?)
     |> maybe_add_router(opts, phoenix?, router)
     |> maybe_add_config(opts, web_module, providers, phoenix?)
+    |> maybe_add_page(opts, app_name)
     |> queue_next_steps(web_module, providers, opts)
   end
 
@@ -151,17 +156,23 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp validate_controller_options!(igniter, opts, web_module) do
-    if opts[:controller] == false && opts[:config] != false do
+    if opts[:controller] == false && opts[:config] != false && not page_only?(opts) do
       controller_module = Module.concat([web_module, AuthController])
-      target_path = ProjectModule.proper_location(igniter, controller_module)
 
-      unless Igniter.exists?(igniter, target_path) do
+      unless controller_exists?(igniter, controller_module, web_module) do
         Mix.raise(
           "--no-controller cannot be combined with config generation unless " <>
             "#{inspect(controller_module)} already exists or --no-config is also supplied."
         )
       end
     end
+  end
+
+  # The controller may live at the path this task generates or anywhere else the
+  # project chose, so both are checked before refusing to wire the callbacks.
+  defp controller_exists?(igniter, controller_module, web_module) do
+    Igniter.exists?(igniter, controller_path(web_module, true)) or
+      match?({:ok, _}, ProjectModule.find_module(igniter, controller_module))
   end
 
   defp add_controller(igniter, web_module, phoenix?) do
@@ -254,26 +265,33 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_router(igniter, true, router) do
-    {igniter, has_browser_pipeline?} =
-      Phoenix.has_pipeline(igniter, router, :browser)
+    if phoenix_router_mounted?(igniter, router) do
+      Igniter.add_notice(
+        igniter,
+        "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+      )
+    else
+      {igniter, has_browser_pipeline?} =
+        Phoenix.has_pipeline(igniter, router, :browser)
 
-    contents =
-      if has_browser_pipeline? do
-        """
-        pipe_through :browser
-        forward "/", Amur.Router
-        """
-      else
-        "forward \"/\", Amur.Router"
-      end
+      contents =
+        if has_browser_pipeline? do
+          """
+          pipe_through :browser
+          forward "/", Amur.Router
+          """
+        else
+          "forward \"/\", Amur.Router"
+        end
 
-    Phoenix.add_scope(
-      igniter,
-      "/auth",
-      contents,
-      router: router,
-      arg2: [alias: false]
-    )
+      Phoenix.add_scope(
+        igniter,
+        "/auth",
+        contents,
+        router: router,
+        arg2: [alias: false]
+      )
+    end
   end
 
   defp add_router(igniter, false, _router) do
@@ -296,6 +314,72 @@ defmodule Mix.Tasks.Amur.Install do
         Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch.")
     end
   end
+
+  # Detects an existing Amur mount so re-running the installer in a project that
+  # already has one does not add a second `forward` to the same router.
+  #
+  # Only a `forward "/", Amur.Router` inside the `/auth` scope counts: a project
+  # that forwards Amur somewhere else (for example `/oauth`) still needs the
+  # documented `/auth` mount, so a whole-file match would wrongly skip it.
+  defp phoenix_router_mounted?(igniter, router) do
+    case Igniter.Project.Module.find_module(igniter, router) do
+      {:ok, {_igniter, _source, zipper}} ->
+        zipper
+        |> Zipper.topmost()
+        |> Zipper.node()
+        |> auth_scope_amur_forward?()
+
+      _ ->
+        false
+    end
+  end
+
+  defp auth_scope_amur_forward?(ast) do
+    {_ast, found?} =
+      Macro.prewalk(ast, false, fn
+        {:scope, _, [path | _]} = node, acc ->
+          {node, acc || (literal_string(path) == "/auth" && scope_contains_amur_forward?(node))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found?
+  end
+
+  defp scope_contains_amur_forward?(scope_ast) do
+    scope_ast
+    |> scope_body()
+    |> Enum.any?(&root_amur_forward?/1)
+  end
+
+  # The statements directly inside a `scope` block, without descending into
+  # nested scopes. A `forward` in a nested scope is mounted at a deeper path
+  # (for example `/auth/nested`), so it must not satisfy the top-level `/auth`
+  # mount check. `Macro.prewalk/3` cannot express this: returning a node
+  # unchanged still descends into it, so nested scopes have to be stopped by
+  # not walking them at all.
+  defp scope_body({:scope, _, [_path, _opts, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body({:scope, _, [_path, [{{:__block__, _, [:do]}, body}]]}),
+    do: scope_statements(body)
+
+  defp scope_body(_other), do: []
+
+  defp scope_statements({:__block__, _, statements}), do: statements
+  defp scope_statements(statement), do: [statement]
+
+  defp root_amur_forward?({:forward, _, [path, router]}),
+    do: literal_string(path) == "/" && amur_router_ast?(router)
+
+  defp root_amur_forward?(_other), do: false
+
+  # Sourceror wraps string literals in a `{:__block__, meta, [value]}` node, so a
+  # plain `"/auth"` pattern would not match the parsed router source.
+  defp literal_string({:__block__, _meta, [value]}) when is_binary(value), do: value
+  defp literal_string(value) when is_binary(value), do: value
+  defp literal_string(_other), do: nil
 
   defp update_plug_router(zipper) do
     if has_auth_forward?(zipper) do
@@ -345,11 +429,35 @@ defmodule Mix.Tasks.Amur.Install do
     end
   end
 
+  # Page-only mode (`--page --no-router --no-controller`) records just the
+  # application name, so it must not rewrite the general configuration: doing so
+  # would add `base_url`, the dotenv loader and (when `--provider` was omitted)
+  # the default GitHub provider to an already configured project.
+  defp page_only?(opts) do
+    opts[:page] == true && opts[:router] == false && opts[:controller] == false
+  end
+
   defp maybe_add_config(igniter, opts, web_module, providers, phoenix?) do
-    if opts[:config] == false do
-      igniter
+    cond do
+      opts[:config] == false -> igniter
+      page_only?(opts) -> igniter
+      true -> add_config(igniter, web_module, providers, phoenix?, opts[:controller] != false)
+    end
+  end
+
+  # The sign-in page is served by `Amur.Router` from Amur's own `priv/`, so
+  # `--page` only needs to record the application name the page displays.
+  defp maybe_add_page(igniter, opts, app_name) do
+    if opts[:page] == true && opts[:config] != false do
+      ProjectConfig.configure(
+        igniter,
+        "runtime.exs",
+        :amur,
+        [:app_name],
+        {:code, Sourceror.parse_string!(inspect(to_string(app_name)))}
+      )
     else
-      add_config(igniter, web_module, providers, phoenix?, opts[:controller] != false)
+      igniter
     end
   end
 
@@ -489,6 +597,13 @@ defmodule Mix.Tasks.Amur.Install do
             "      2. Customize auth success/failure handling:\n         #{inspect(web_module)}.AuthController"
           end
 
+        flow_step =
+          if opts[:page] do
+            "      3. Open the sign-in page at:\n         /auth"
+          else
+            "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
+          end
+
         """
             Required next steps:
               1. Export the following environment variables:
@@ -496,8 +611,7 @@ defmodule Mix.Tasks.Amur.Install do
 
         #{controller_step}
 
-              3. Initiate an OAuth flow at:
-                 /auth/#{provider_example}
+        #{flow_step}
         """
       end
 
