@@ -74,6 +74,79 @@ GITHUB_CLIENT_SECRET=<SECRET>
 
 That's it for basic setup of Amur.
 
+## Adding the sign-in page to an existing project
+
+If Amur is already installed and you only want the sign-in page, re-run the
+installer with `--page`. The task is additive: it merges new providers into your
+existing configuration and leaves files it already generated untouched.
+
+```bash
+mix igniter.install amur --provider github,google,discord --page
+```
+
+Running it again is safe. The installer detects an existing Amur mount and does
+not add a second `forward` to your router, and it skips the auth controller when
+one is already present:
+
+```
+[skip] MyAppWeb.Router already forwards to Amur.Router; leaving unchanged.
+[skip] lib/my_app_web/controllers/auth_controller.ex already exists; leaving unchanged.
+```
+
+Providers are merged rather than replaced, so adding one does not drop the
+credentials already configured:
+
+```elixir
+config :amur,
+  providers: [
+    github: [...],   # kept
+    google: [...],   # added
+    discord: [...]   # added
+  ],
+  app_name: "MyApp"  # added by --page
+```
+
+### Page only, no other changes
+
+To add just the page to a project that is already configured, skip the pieces
+you do not want regenerated:
+
+```bash
+mix igniter.install amur --page --no-router --no-controller
+```
+
+`--no-router` and `--no-controller` leave your existing router and controller
+alone, while `--page` still records the application name used in the heading.
+
+### Without Igniter
+
+The page is served by `Amur.Router` from Amur's own `priv/` directory, so no
+files need to be copied into your application. If you mount the router manually,
+the page is available as soon as the router is mounted:
+
+```elixir
+# Phoenix
+scope "/auth", alias: false do
+  pipe_through :browser
+  forward "/", Amur.Router
+end
+```
+
+```elixir
+# Plug
+forward "/auth", to: Amur.Router
+```
+
+Then set the name shown in the heading:
+
+```elixir
+config :amur,
+  app_name: "MyApp"
+```
+
+Visit `/auth` to see the page. See [Sign-in page](#sign-in-page) for the logo and
+heading options.
+
 ## Built-in providers
 
 Amur ships with support for the following providers:
