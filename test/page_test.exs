@@ -14,6 +14,38 @@ defmodule Amur.PageTest do
     def normalize_user(user), do: %{uid: user["id"]}
   end
 
+  defmodule LogoProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+
+    @impl true
+    def logo, do: {:svg, ~s|<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>|}
+  end
+
+  defmodule PathLogoProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+
+    @impl true
+    def logo, do: {:path, "/images/custom.svg"}
+  end
+
   setup do
     previous = %{
       providers: Application.get_env(:amur, :providers),
@@ -306,5 +338,47 @@ defmodule Amur.PageTest do
     Application.put_env(:amur, :providers, github: [])
 
     assert logo_markup(render_page().resp_body) =~ "<svg"
+  end
+
+  test "renders a custom provider's inline SVG logo on its button" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|<circle cx="12" cy="12" r="10"/>|
+  end
+
+  test "renders a custom provider's logo path as an image on its button" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.PathLogoProvider)
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|<img src="/images/custom.svg" alt="" />|
+  end
+
+  test "uses a custom provider's logo as the page logo fallback" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
+
+    assert logo_markup(render_page().resp_body) =~ ~s|<circle cx="12" cy="12" r="10"/>|
+  end
+
+  test "renders no icon for a custom provider without a logo" do
+    Application.delete_env(:amur, :logo)
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.CustomProvider)
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|href="/auth/custom"|
+    refute body =~ "<img"
+  end
+
+  test "prefers the page logo over a custom provider's logo" do
+    Application.put_env(:amur, :logo, {:path, "/images/logo.svg"})
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
+
+    assert logo_markup(render_page().resp_body) =~ ~s|src="/images/logo.svg"|
   end
 end
