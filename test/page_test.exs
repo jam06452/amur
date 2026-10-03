@@ -1,6 +1,19 @@
 defmodule Amur.PageTest do
   use ExUnit.Case, async: false
 
+  defmodule CustomProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+  end
+
   setup do
     previous = %{
       providers: Application.get_env(:amur, :providers),
@@ -31,11 +44,12 @@ defmodule Amur.PageTest do
   end
 
   # The logo element, isolated from the provider buttons that also carry icons.
+  # The markup spans multiple lines, so the whole element is captured.
   defp logo_markup(body) do
-    body
-    |> String.split("\n")
-    |> Enum.find(&String.contains?(&1, "amur-logo"))
-    |> String.trim()
+    case Regex.run(~r/<span class="amur-logo".*?<\/span>|<img class="amur-logo"[^>]*\/>/s, body) do
+      [markup] -> markup
+      nil -> ""
+    end
   end
 
   defp write_logo_file!(markup) do
@@ -56,10 +70,41 @@ defmodule Amur.PageTest do
 
     for provider <- ["github", "google", "discord"] do
       assert conn.resp_body =~ ~s|href="/auth/#{provider}"|
-      assert conn.resp_body =~ ~s|src="/auth/#{provider}.svg"|
     end
 
+    # Icons are inlined so they can follow the page's text colour: one per
+    # provider plus the logo fallback.
+    assert length(Regex.scan(~r/<svg/, conn.resp_body)) == 4
     assert conn.resp_body =~ "Sign in to Acme"
+  end
+
+  test "inlines provider icons with currentColor so they adapt to dark mode" do
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|fill="currentColor"|
+    refute body =~ ~s|fill="#000000"|
+    refute body =~ "<img"
+  end
+
+  test "formats provider names for the button label" do
+    Application.put_env(:amur, :providers, azure_ad: [], digital_ocean: [], github: [], line: [])
+
+    body = render_page().resp_body
+
+    assert body =~ "Continue with Azure AD"
+    assert body =~ "Continue with DigitalOcean"
+    assert body =~ "Continue with GitHub"
+    assert body =~ "Continue with LINE"
+    refute body =~ "Azure_ad"
+    refute body =~ "Digital_ocean"
+  end
+
+  test "title-cases providers that are not in the label table" do
+    Application.put_env(:amur, :providers, custom_thing: Amur.PageTest.CustomProvider)
+
+    assert render_page().resp_body =~ "Continue with Custom Thing"
   end
 
   test "builds asset and provider URLs from the mount point" do
@@ -68,7 +113,6 @@ defmodule Amur.PageTest do
     body = render_page(["auth"]).resp_body
 
     assert body =~ ~s|href="/auth/amur.css"|
-    assert body =~ ~s|src="/auth/github.svg"|
     assert body =~ ~s|href="/auth/github"|
   end
 
@@ -78,7 +122,6 @@ defmodule Amur.PageTest do
     body = render_page([]).resp_body
 
     assert body =~ ~s|href="/amur.css"|
-    assert body =~ ~s|src="/github.svg"|
     assert body =~ ~s|href="/github"|
   end
 
@@ -88,7 +131,6 @@ defmodule Amur.PageTest do
     body = render_page(["api", "v1", "auth"]).resp_body
 
     assert body =~ ~s|href="/api/v1/auth/amur.css"|
-    assert body =~ ~s|src="/api/v1/auth/github.svg"|
     assert body =~ ~s|href="/api/v1/auth/github"|
   end
 
@@ -146,6 +188,18 @@ defmodule Amur.PageTest do
     assert conn.resp_body =~ ".amur-page"
   end
 
+  test "resets the document box so the page fills the viewport" do
+    conn =
+      Plug.Test.conn(:get, "/auth/amur.css")
+      |> Plug.Test.init_test_session(%{})
+      |> then(&Amur.Router.call(%{&1 | path_info: ["amur.css"]}, []))
+
+    # Without this the browser's default body margin leaves a white border
+    # around the page, which is visible against the dark background.
+    assert conn.resp_body =~ ~r/html,\s*body\s*\{[^}]*margin:\s*0/
+    assert conn.resp_body =~ ~r/html,\s*body\s*\{[^}]*background:\s*var\(--amur-bg\)/
+  end
+
   test "serves provider icons with the correct content type" do
     conn =
       Plug.Test.conn(:get, "/auth/github.svg")
@@ -196,7 +250,10 @@ defmodule Amur.PageTest do
     Application.delete_env(:amur, :logo)
     Application.put_env(:amur, :providers, github: [], google: [])
 
-    assert logo_markup(render_page().resp_body) =~ ~s|src="/auth/github.svg"|
+    markup = logo_markup(render_page().resp_body)
+
+    assert markup =~ "<svg"
+    assert markup =~ ~s|fill="currentColor"|
   end
 
   test "uses a configured logo path" do
@@ -233,7 +290,7 @@ defmodule Amur.PageTest do
     Application.put_env(:amur, :logo, {:file, "/nonexistent/logo.svg"})
     Application.put_env(:amur, :providers, github: [])
 
-    assert logo_markup(render_page().resp_body) =~ ~s|src="/auth/github.svg"|
+    assert logo_markup(render_page().resp_body) =~ "<svg"
   end
 
   test "renders an inline SVG logo as markup" do
@@ -248,6 +305,6 @@ defmodule Amur.PageTest do
     Application.put_env(:amur, :logo, :not_a_logo)
     Application.put_env(:amur, :providers, github: [])
 
-    assert logo_markup(render_page().resp_body) =~ ~s|src="/auth/github.svg"|
+    assert logo_markup(render_page().resp_body) =~ "<svg"
   end
 end

@@ -312,4 +312,132 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     refute Map.has_key?(igniter.assigns[:test_files], "config/runtime.exs")
   end
+
+  test "does not add a second forward when the router already mounts Amur" do
+    mounted = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/auth", alias: false do
+        pipe_through :browser
+        forward "/", Amur.Router
+      end
+    end
+    """
+
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{"lib/sample_web/router.ex" => mounted}
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
+
+  test "adds the page config to a project that already has Amur installed" do
+    existing = %{
+      "lib/sample_web/router.ex" => """
+      defmodule SampleWeb.Router do
+        use Phoenix.Router
+
+        pipeline :browser do
+          plug :accepts, ["html"]
+        end
+
+        scope "/auth", alias: false do
+          pipe_through :browser
+          forward "/", Amur.Router
+        end
+      end
+      """,
+      "lib/sample_web/controllers/auth_controller.ex" => """
+      defmodule SampleWeb.AuthController do
+        @behaviour Amur.Callback
+        def on_success(conn, _), do: conn
+        def on_failure(conn, _), do: conn
+      end
+      """,
+      "config/runtime.exs" => """
+      import Config
+
+      config :amur,
+        providers: [
+          github: [
+            client_id: System.fetch_env!("GITHUB_CLIENT_ID"),
+            client_secret: System.fetch_env!("GITHUB_CLIENT_SECRET")
+          ]
+        ]
+      """
+    }
+
+    {:ok, igniter, %{warnings: warnings, notices: notices}} =
+      apply_install_with_messages(
+        ["--provider", "github,google", "--page", "--app", "sample", "--yes"],
+        existing
+      )
+
+    assert warnings == []
+    assert Enum.any?(notices, &String.contains?(&1, "already forwards to Amur.Router"))
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ "github: ["
+    assert runtime =~ "google: ["
+    assert runtime =~ ~s|app_name: "sample"|
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+
+    controller = igniter.assigns[:test_files]["lib/sample_web/controllers/auth_controller.ex"]
+    assert controller =~ "def on_success(conn, _), do: conn"
+  end
+
+  test "adds only the page config with --page --no-router --no-controller" do
+    existing = %{
+      "lib/sample_web/router.ex" => """
+      defmodule SampleWeb.Router do
+        use Phoenix.Router
+
+        pipeline :browser do
+          plug :accepts, ["html"]
+        end
+
+        scope "/auth", alias: false do
+          pipe_through :browser
+          forward "/", Amur.Router
+        end
+      end
+      """,
+      "lib/sample_web/controllers/auth_controller.ex" => """
+      defmodule SampleWeb.AuthController do
+        @behaviour Amur.Callback
+        def on_success(conn, _), do: conn
+        def on_failure(conn, _), do: conn
+      end
+      """,
+      "config/runtime.exs" => """
+      import Config
+
+      config :amur, providers: [github: []]
+      """
+    }
+
+    {:ok, igniter, %{warnings: warnings}} =
+      apply_install_with_messages(
+        ["--page", "--no-router", "--no-controller", "--app", "sample", "--yes"],
+        existing
+      )
+
+    assert warnings == []
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ ~s|app_name: "sample"|
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
 end
