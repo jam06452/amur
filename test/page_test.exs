@@ -62,6 +62,45 @@ defmodule Amur.PageTest do
     def logo, do: {:path, ~s|/x.svg" onerror="alert(1)|}
   end
 
+  defmodule InlineSvgProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+
+    @impl true
+    def logo do
+      {:svg,
+       """
+       <?xml version="1.0" encoding="UTF-8"?>
+       <!-- a comment -->
+       <svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+       """}
+    end
+  end
+
+  defmodule NoRootSvgProvider do
+    use Amur.Provider
+
+    @impl true
+    def strategy, do: Assent.Strategy.OAuth2
+
+    @impl true
+    def base_config, do: []
+
+    @impl true
+    def normalize_user(user), do: %{uid: user["id"]}
+
+    @impl true
+    def logo, do: {:svg, "<circle cx=\"12\" cy=\"12\" r=\"10\"/>"}
+  end
+
   setup do
     previous = %{
       providers: Application.get_env(:amur, :providers),
@@ -304,10 +343,21 @@ defmodule Amur.PageTest do
     # resource that triggers a rebuild when it changes.
     refute function_exported?(Amur.Page, :render_page, 4)
 
-    {:ok, {_module, [compile_info: info]}} =
-      :beam_lib.chunks(:code.which(Amur.Page), [:compile_info])
+    # Under `mix test --cover` the module is loaded from `cover_compiled.beam`,
+    # which carries no compile info, so the source check only runs on a normal
+    # build.
+    case :code.which(Amur.Page) do
+      path when is_list(path) ->
+        if Path.basename(path) == "cover_compiled.beam" do
+          assert true
+        else
+          {:ok, {_module, [compile_info: info]}} = :beam_lib.chunks(path, [:compile_info])
+          assert to_string(info[:source]) =~ "page.ex"
+        end
 
-    assert to_string(info[:source]) =~ "page.ex"
+      _ ->
+        assert true
+    end
   end
 
   test "reflects a newly configured provider without recompiling Amur" do
@@ -444,5 +494,68 @@ defmodule Amur.PageTest do
     Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
 
     assert logo_markup(render_page().resp_body) =~ ~s|src="/images/logo.svg"|
+  end
+
+  test "renders inline SVG markup that has no root svg element" do
+    Application.put_env(:amur, :logo, {:svg, "<circle cx=\"12\" cy=\"12\" r=\"10\"/>"})
+    Application.put_env(:amur, :providers, github: [])
+
+    assert logo_markup(render_page().resp_body) =~ ~s|<circle cx="12" cy="12" r="10"/>|
+  end
+
+  test "strips the XML declaration and comments from a provider icon" do
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.InlineSvgProvider)
+
+    body = render_page().resp_body
+
+    # The page logo renders the provider's `logo/0` verbatim, so isolate the
+    # button icon, which is the markup that goes through `inline_svg/1`.
+    [icon] =
+      Regex.run(~r|<span class="amur-provider-icon"[^>]*>(.*?)</span>|s, body,
+        capture: :all_but_first
+      )
+
+    refute icon =~ "<?xml"
+    refute icon =~ "<!--"
+    refute icon =~ ~s|width="24"|
+    refute icon =~ ~s|height="24"|
+    assert icon =~ ~s|viewBox="0 0 24 24"|
+  end
+
+  test "returns nil for an asset with no filename" do
+    conn = Plug.Test.conn(:get, "/auth/")
+
+    assert Amur.Page.asset(conn, [""]) == nil
+  end
+
+  test "returns nil for a directory path" do
+    conn = Plug.Test.conn(:get, "/auth/")
+
+    assert Amur.Page.asset(conn, [".."]) == nil
+  end
+
+  test "serves an unknown asset type as a binary download" do
+    path = Path.join([:code.priv_dir(:amur), "static", "amur.txt"])
+    File.write!(path, "hello")
+    on_exit(fn -> File.rm(path) end)
+
+    conn = Plug.Test.conn(:get, "/auth/amur.txt")
+    conn = Amur.Page.asset(conn, ["amur.txt"])
+
+    assert conn.status == 200
+
+    assert Plug.Conn.get_resp_header(conn, "content-type") == [
+             "application/octet-stream; charset=utf-8"
+           ]
+
+    assert conn.resp_body == "hello"
+  end
+
+  test "inlines a provider icon that has no root svg element" do
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.NoRootSvgProvider)
+
+    body = render_page().resp_body
+
+    assert body =~ ~s|<circle cx="12" cy="12" r="10"/>|
   end
 end

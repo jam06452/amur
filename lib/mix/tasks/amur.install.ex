@@ -106,11 +106,8 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp resolve_providers(opts) do
     cond do
-      opts[:all] && amur_config_built_in_providers?() ->
-        Amur.Config.built_in_providers()
-
       opts[:all] ->
-        Mix.raise("Amur.Config.built_in_providers/0 is unavailable; cannot resolve --all.")
+        Amur.Config.built_in_providers()
 
       not is_nil(opts[:provider]) ->
         opts[:provider]
@@ -128,8 +125,7 @@ defmodule Mix.Tasks.Amur.Install do
     if Regex.match?(~r/^[a-z][a-z0-9_]*$/, provider) do
       provider = String.to_atom(provider)
 
-      if not amur_config_built_in_providers?() or
-           provider in Amur.Config.built_in_providers() do
+      if provider in Amur.Config.built_in_providers() do
         provider
       else
         Mix.raise("Unknown built-in provider #{inspect(provider)}.")
@@ -140,11 +136,6 @@ defmodule Mix.Tasks.Amur.Install do
           "and contain only lowercase letters, numbers, and underscores."
       )
     end
-  end
-
-  defp amur_config_built_in_providers? do
-    Code.ensure_loaded?(Amur.Config) &&
-      function_exported?(Amur.Config, :built_in_providers, 0)
   end
 
   defp maybe_add_controller(igniter, opts, web_module, phoenix?) do
@@ -335,10 +326,13 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp auth_scope_amur_forward?(ast) do
+    aliases = collect_aliases(ast)
+
     {_ast, found?} =
       Macro.prewalk(ast, false, fn
         {:scope, _, [path | _]} = node, acc ->
-          {node, acc || (literal_string(path) == "/auth" && scope_contains_amur_forward?(node))}
+          {node,
+           acc || (literal_string(path) == "/auth" && scope_contains_amur_forward?(node, aliases))}
 
         node, acc ->
           {node, acc}
@@ -347,10 +341,10 @@ defmodule Mix.Tasks.Amur.Install do
     found?
   end
 
-  defp scope_contains_amur_forward?(scope_ast) do
+  defp scope_contains_amur_forward?(scope_ast, aliases) do
     scope_ast
     |> scope_body()
-    |> Enum.any?(&root_amur_forward?/1)
+    |> Enum.any?(&root_amur_forward?(&1, aliases))
   end
 
   # The statements directly inside a `scope` block, without descending into
@@ -370,15 +364,14 @@ defmodule Mix.Tasks.Amur.Install do
   defp scope_statements({:__block__, _, statements}), do: statements
   defp scope_statements(statement), do: [statement]
 
-  defp root_amur_forward?({:forward, _, [path, router]}),
-    do: literal_string(path) == "/" && amur_router_ast?(router)
+  defp root_amur_forward?({:forward, _, [path, router]}, aliases),
+    do: literal_string(path) == "/" && resolve_forward_target(router, aliases) == Amur.Router
 
-  defp root_amur_forward?(_other), do: false
+  defp root_amur_forward?(_other, _aliases), do: false
 
   # Sourceror wraps string literals in a `{:__block__, meta, [value]}` node, so a
   # plain `"/auth"` pattern would not match the parsed router source.
   defp literal_string({:__block__, _meta, [value]}) when is_binary(value), do: value
-  defp literal_string(value) when is_binary(value), do: value
   defp literal_string(_other), do: nil
 
   defp update_plug_router(zipper) do
@@ -390,26 +383,119 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp has_auth_forward?(zipper) do
+    aliases = zipper |> Zipper.topmost() |> Zipper.node() |> collect_aliases()
+
     match?(
       {:ok, _},
       Function.move_to_function_call(zipper, :forward, 2, fn call ->
-        auth_forward_call?(Zipper.node(call))
+        auth_forward_call?(Zipper.node(call), aliases)
       end)
     )
   end
 
-  defp auth_forward_call?({:forward, _, ["/auth", router]}), do: amur_router_ast?(router)
-  defp auth_forward_call?(_), do: false
+  defp auth_forward_call?({:forward, _, [path, opts]}, aliases) do
+    literal_string(path) == "/auth" and
+      opts |> forward_target() |> resolve_forward_target(aliases) == Amur.Router
+  end
 
-  defp amur_router_ast?(Amur.Router), do: true
-  defp amur_router_ast?({:__aliases__, _, [:Amur, :Router]}), do: true
-  defp amur_router_ast?(to: router), do: amur_router_ast?(router)
-  defp amur_router_ast?(_), do: false
+  # Sourceror wraps the `:dispatch` atom in a `{:__block__, meta, [:dispatch]}`
+  # node, so a bare `[:dispatch | _]` pattern never matches parsed source.
+  defp dispatch_plug?({:plug, _, [{:__block__, _, [:dispatch]}]}), do: true
+  defp dispatch_plug?(_other), do: false
+
+  # Extracts the router from a `forward` call's second argument, which may be a
+  # bare module (`forward "/auth", Amur.Router`) or a `to:` keyword list
+  # (`forward "/auth", to: Amur.Router`). Sourceror nests the keyword list and
+  # wraps its key, so both shapes are normalized here.
+  defp forward_target(opts) when is_list(opts) do
+    opts
+    |> List.flatten()
+    |> Enum.find_value(fn
+      {{:__block__, _, [:to]}, value} -> value
+      _ -> nil
+    end)
+  end
+
+  defp forward_target(other), do: other
+
+  # Resolves a `forward` target written as an alias (for example `Router` after
+  # `alias Amur.Router`) to the module it names, so an existing mount is
+  # recognized no matter how the project chose to spell it. `alias: false` on
+  # the surrounding scope only disables Phoenix's controller aliasing; a
+  # module-level `alias` still applies, so the AST alone is not enough.
+  defp resolve_forward_target({:__aliases__, _, segments}, aliases) when is_list(segments) do
+    expand_alias_segments(segments, aliases)
+  end
+
+  defp resolve_forward_target(_other, _aliases), do: nil
+
+  # Expands the first segment of an alias against the module's `alias`
+  # declarations, mirroring how the compiler resolves `Router` to
+  # `Amur.Router`. A leading `Elixir.` segment is already fully qualified.
+  defp expand_alias_segments([:"Elixir" | rest], _aliases), do: Module.concat(rest)
+
+  defp expand_alias_segments([head | rest], aliases) do
+    case Map.fetch(aliases, head) do
+      {:ok, module} -> Module.concat([module | rest])
+      :error -> Module.concat([head | rest])
+    end
+  end
+
+  # Collects the module-level `alias` declarations from a router's AST into a
+  # map of the local name to the module it points at. Only the simple
+  # `alias Foo.Bar` and `alias Foo.Bar, as: Baz` forms are tracked, which is
+  # what a router uses to shorten `Amur.Router`.
+  defp collect_aliases(ast) do
+    {_ast, aliases} =
+      Macro.prewalk(ast, %{}, fn
+        {:alias, _, [target | opts]} = node, acc ->
+          {node, put_alias(acc, target, opts)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    aliases
+  end
+
+  defp put_alias(acc, target, opts) do
+    case alias_target(target) do
+      {:ok, module} ->
+        name =
+          case alias_as(opts) do
+            {:__aliases__, _, [as]} -> as
+            _ -> module |> Module.split() |> List.last() |> String.to_atom()
+          end
+
+        Map.put(acc, name, module)
+
+      :error ->
+        acc
+    end
+  end
+
+  # Sourceror wraps keyword keys in `{:__block__, meta, [:as]}` and nests the
+  # keyword list one level deeper than `Keyword.get/2` expects, so neither a
+  # plain lookup nor a flat scan finds the `as:` option on a parsed alias.
+  defp alias_as(opts) do
+    opts
+    |> List.flatten()
+    |> Enum.find_value(fn
+      {{:__block__, _, [:as]}, value} -> value
+      _ -> nil
+    end)
+  end
+
+  defp alias_target({:__aliases__, _, segments}) when is_list(segments) do
+    {:ok, Module.concat(segments)}
+  end
+
+  defp alias_target(_other), do: :error
 
   defp patch_plug_router_zipper(zipper) do
     dispatch_call =
       Function.move_to_function_call(zipper, :plug, [1, 2], fn call ->
-        match?({:plug, _, [:dispatch | _]}, Zipper.node(call))
+        dispatch_plug?(Zipper.node(call))
       end)
 
     forward_ast = Sourceror.parse_string!("forward(\"/auth\", to: Amur.Router)")
@@ -419,13 +505,8 @@ defmodule Mix.Tasks.Amur.Install do
         Zipper.insert_left(call_zipper, forward_ast)
 
       _ ->
-        case CodeModule.move_to_use(zipper, Plug.Router) do
-          {:ok, use_zipper} ->
-            Zipper.insert_right(use_zipper, forward_ast)
-
-          _ ->
-            zipper
-        end
+        {:ok, use_zipper} = CodeModule.move_to_use(zipper, Plug.Router)
+        Zipper.insert_right(use_zipper, forward_ast)
     end
   end
 

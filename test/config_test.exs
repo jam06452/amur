@@ -37,6 +37,14 @@ defmodule Amur.ConfigTest do
     assert {:error, :unknown_provider} = Amur.Config.resolve("nope")
   end
 
+  test "resolve/1 returns unknown for a string that is not an existing atom" do
+    # Guards the atom-table safety: a request parameter must not be able to
+    # grow the VM atom table, so an unknown binary resolves to an error rather
+    # than being converted with `String.to_atom/1`.
+    assert {:error, :unknown_provider} =
+             Amur.Config.resolve("amur_definitely_not_an_existing_atom")
+  end
+
   test "built_in_providers/0 returns all built-in provider atoms sorted" do
     providers = Amur.Config.built_in_providers()
 

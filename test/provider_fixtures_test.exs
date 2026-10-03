@@ -91,5 +91,11 @@ defmodule Amur.ProviderFixturesTest do
       assert is_map(normalized)
       assert normalized.uid == "fixture-id"
     end
+
+    test "#{provider} uses the default logo/0 from Amur.Provider" do
+      module = Map.fetch!(@providers, unquote(provider))
+
+      assert module.logo() == :error
+    end
   end
 end
