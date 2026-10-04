@@ -36,8 +36,8 @@ defmodule Amur.Controller do
           {:ok, conn, strategy} ->
             {{:ok, conn}, %{result: :ok, strategy: strategy}}
 
-          {:error, reason} ->
-            {{:error, reason}, %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+          {:error, reason, strategy} ->
+            {{:error, reason}, stop_metadata(:error, reason, strategy)}
         end
       end)
 
@@ -51,15 +51,25 @@ defmodule Amur.Controller do
   end
 
   defp do_request(conn, provider) do
-    with {:ok, {_module, config}} <- Amur.Config.resolve(provider),
-         strategy = Keyword.fetch!(config, :strategy),
-         {:ok, %{url: url, session_params: session_params}} <- strategy.authorize_url(config) do
-      conn =
-        conn
-        |> put_session(:amur_session_params, session_params)
-        |> redirect(url)
+    case Amur.Config.resolve(provider) do
+      {:ok, {_module, config}} ->
+        strategy = Keyword.fetch!(config, :strategy)
 
-      {:ok, conn, strategy}
+        case strategy.authorize_url(config) do
+          {:ok, %{url: url, session_params: session_params}} ->
+            conn =
+              conn
+              |> put_session(:amur_session_params, session_params)
+              |> redirect(url)
+
+            {:ok, conn, strategy}
+
+          {:error, reason} ->
+            {:error, reason, strategy}
+        end
+
+      {:error, reason} ->
+        {:error, reason, nil}
     end
   end
 
@@ -84,8 +94,8 @@ defmodule Amur.Controller do
           {:ok, %{user: user, token: token}, strategy} ->
             {{:ok, user, token}, %{result: :ok, strategy: strategy}}
 
-          {:error, reason} ->
-            {{:error, reason}, %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+          {:error, reason, strategy} ->
+            {{:error, reason}, stop_metadata(:error, reason, strategy)}
         end
       end)
 
@@ -100,18 +110,35 @@ defmodule Amur.Controller do
   end
 
   defp do_callback(_conn, provider, session_params, params) do
-    with {:ok, {module, config}} <- Amur.Config.resolve(provider),
-         strategy = Keyword.fetch!(config, :strategy),
-         config = Keyword.put(config, :session_params, session_params),
-         :ok <- validate_session_params(session_params),
-         {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
-      normalized =
-        user
-        |> module.normalize_user()
-        |> Map.put(:provider, provider)
+    case Amur.Config.resolve(provider) do
+      {:ok, {module, config}} ->
+        strategy = Keyword.fetch!(config, :strategy)
+        config = Keyword.put(config, :session_params, session_params)
 
-      {:ok, %{user: normalized, token: token}, strategy}
+        with :ok <- validate_session_params(session_params),
+             {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
+          normalized =
+            user
+            |> module.normalize_user()
+            |> Map.put(:provider, provider)
+
+          {:ok, %{user: normalized, token: token}, strategy}
+        else
+          {:error, reason} -> {:error, reason, strategy}
+        end
+
+      {:error, reason} ->
+        {:error, reason, nil}
     end
+  end
+
+  # Builds the `:stop` metadata. `strategy` is included only when the provider
+  # resolved far enough to know it, so a handler can rely on the key being
+  # present whenever the failure came from the strategy rather than from
+  # resolving the provider itself.
+  defp stop_metadata(:error, reason, strategy) do
+    metadata = %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}
+    if strategy, do: Map.put(metadata, :strategy, strategy), else: metadata
   end
 
   # Resolves the provider name for telemetry metadata without touching the atom
@@ -124,7 +151,7 @@ defmodule Amur.Controller do
   defp resolve_provider(provider) do
     configured = Application.get_env(:amur, :providers, [])
 
-    Enum.find_value(configured, fn {name, _value} ->
+    Enum.find_value(configured, nil, fn {name, _value} ->
       if to_string(name) == provider and match?({:ok, _}, Amur.Config.resolve(name)), do: name
     end)
   end

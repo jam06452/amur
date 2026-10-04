@@ -39,7 +39,7 @@ defmodule Amur.Telemetry.Events do
   | Key | Description |
   |---|---|
   | `provider` | The resolved provider atom, such as `:github`, or `nil` when the request names a provider that is not configured or does not resolve. |
-  | `strategy` | The Assent strategy module, present on `:stop` once the provider has resolved. It is not present on `:exception`, because an exception can be raised before the strategy is known. |
+  | `strategy` | The Assent strategy module, present on `:stop` when the provider resolved far enough to know it. It is absent when the provider itself could not be resolved, and never present on `:exception`, because an exception can be raised before the strategy is known. |
   | `result` | `:ok` or `:error`, present on `:stop`. |
   | `reason` | A sanitized failure category, present on `:stop` when `result` is `:error`. See below. |
   | `kind`, `reason`, `stacktrace` | The failure details on `:exception`, matching `:telemetry.span/3`. |

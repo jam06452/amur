@@ -104,6 +104,25 @@ defmodule Amur.TelemetryTest do
       assert metadata.result == :error
       assert metadata.reason == :provider_error
     end
+
+    test "includes strategy on an error stop when the provider resolved" do
+      # The provider resolved and the strategy ran, so a handler can rely on
+      # `strategy` being present even though the request failed.
+      Application.put_env(:amur, :providers, failing: Amur.TelemetryTest.FailingProvider)
+
+      Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "failing"})
+
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.strategy == Amur.TelemetryTest.FailingStrategy
+    end
+
+    test "omits strategy on an error stop when the provider did not resolve" do
+      Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "missing"})
+
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.result == :error
+      refute Map.has_key?(metadata, :strategy)
+    end
   end
 
   describe "callback span" do
@@ -329,7 +348,12 @@ defmodule Amur.TelemetryTest do
 
       assert Telemetry.sanitize_reason(Assent.CallbackError.exception(message: "other")) ==
                :provider_error
+    end
 
+    test "categorizes transport-level failures as network errors" do
+      # Assent wraps every adapter failure in `ServerUnreachableError`, so this
+      # is the shape Amur actually sees for a transport error, whatever the
+      # underlying adapter (Mint, :httpc, ...) reported in `:reason`.
       assert Telemetry.sanitize_reason(
                Assent.ServerUnreachableError.exception(
                  http_adapter: Assent.HTTPAdapter.Httpc,
@@ -337,17 +361,14 @@ defmodule Amur.TelemetryTest do
                  reason: :timeout
                )
              ) == :network_error
-    end
-
-    test "categorizes transport-level failures as network errors" do
-      assert Telemetry.sanitize_reason(Mint.TransportError.exception(reason: :closed)) ==
-               :network_error
 
       assert Telemetry.sanitize_reason(
-               Mint.HTTPError.exception(reason: :protocol_error, module: Mint.HTTP1)
+               Assent.ServerUnreachableError.exception(
+                 http_adapter: Assent.HTTPAdapter.Httpc,
+                 request_url: "https://example.com",
+                 reason: %{__struct__: Mint.TransportError, reason: :closed}
+               )
              ) == :network_error
-
-      assert Telemetry.sanitize_reason(:timeout) == :network_error
     end
 
     test "falls back to :provider_error for unknown reasons" do
