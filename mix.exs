@@ -51,7 +51,8 @@ defmodule Amur.MixProject do
       "guides/learning/configuration.md",
       "guides/learning/oauth_flow.md",
       "guides/learning/custom_providers.md",
-      "guides/learning/sign_in_page.md"
+      "guides/learning/sign_in_page.md",
+      "guides/learning/telemetry.md"
     ]
   end
 
@@ -77,6 +78,9 @@ defmodule Amur.MixProject do
         Amur.Provider,
         Amur.Callback,
         Amur.User
+      ],
+      Telemetry: [
+        Amur.Telemetry.Events
       ]
     ]
   end
@@ -103,6 +107,7 @@ defmodule Amur.MixProject do
     [
       {:assent, "~> 0.3"},
       {:plug, ">= 0.0.0"},
+      {:telemetry, "~> 1.4"},
       {:igniter, "~> 0.8.4", optional: true},
 
       # Test & Dev

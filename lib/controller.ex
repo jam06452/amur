@@ -30,14 +30,28 @@ defmodule Amur.Controller do
   connection returned by the configured failure callback.
   """
   def request(conn, %{"provider" => provider}) do
+    Amur.Telemetry.span([:amur, :request], %{provider: resolve_provider(provider)}, fn ->
+      case do_request(conn, provider) do
+        {:ok, conn, strategy} ->
+          {conn, %{result: :ok, strategy: strategy}}
+
+        {:error, reason} ->
+          {handle_failure(conn, reason),
+           %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+      end
+    end)
+  end
+
+  defp do_request(conn, provider) do
     with {:ok, {_module, config}} <- Amur.Config.resolve(provider),
          strategy = Keyword.fetch!(config, :strategy),
          {:ok, %{url: url, session_params: session_params}} <- strategy.authorize_url(config) do
-      conn
-      |> put_session(:amur_session_params, session_params)
-      |> redirect(url)
-    else
-      {:error, reason} -> handle_failure(conn, reason)
+      conn =
+        conn
+        |> put_session(:amur_session_params, session_params)
+        |> redirect(url)
+
+      {:ok, conn, strategy}
     end
   end
 
@@ -56,6 +70,29 @@ defmodule Amur.Controller do
     session_params = get_session(conn, :amur_session_params)
     conn = delete_session(conn, :amur_session_params)
 
+    result =
+      Amur.Telemetry.span([:amur, :callback], %{provider: resolve_provider(provider)}, fn ->
+        case do_callback(conn, provider, session_params, params) do
+          {:ok, %{user: user, token: token}, strategy} ->
+            {{:ok, user, token}, %{result: :ok, strategy: strategy}}
+
+          {:error, reason} ->
+            {{:error, handle_failure(conn, reason)},
+             %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+        end
+      end)
+
+    case result do
+      {:ok, user, token} ->
+        on_success = Application.fetch_env!(:amur, :on_success)
+        on_success.(conn, %{user: user, token: token})
+
+      {:error, conn} ->
+        conn
+    end
+  end
+
+  defp do_callback(_conn, provider, session_params, params) do
     with {:ok, {module, config}} <- Amur.Config.resolve(provider),
          strategy = Keyword.fetch!(config, :strategy),
          config = Keyword.put(config, :session_params, session_params),
@@ -66,11 +103,21 @@ defmodule Amur.Controller do
         |> module.normalize_user()
         |> Map.put(:provider, provider)
 
-      on_success = Application.fetch_env!(:amur, :on_success)
-      on_success.(conn, %{user: normalized, token: token})
-    else
-      {:error, reason} -> handle_failure(conn, reason)
+      {:ok, %{user: normalized, token: token}, strategy}
     end
+  end
+
+  # Resolves the provider name for telemetry metadata without touching the atom
+  # table. The request parameter is matched against the configured provider keys
+  # rather than converted with `String.to_existing_atom/1`, so a path like
+  # `/auth/ok` cannot label a metric with an unrelated existing atom. Unknown
+  # providers report `nil`, keeping metric labels bounded.
+  defp resolve_provider(provider) do
+    configured = Application.get_env(:amur, :providers, [])
+
+    Enum.find_value(configured, fn {name, _value} ->
+      if to_string(name) == provider, do: name
+    end)
   end
 
   # Delegate failure handling to application code when a custom callback is

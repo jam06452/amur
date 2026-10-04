@@ -24,6 +24,8 @@ battle-tested library and Amur focuses on the Plug integration.
   provider-specific fields passed through.
 - **Custom providers** — add any OAuth 2.0 or OAuth 1.0 provider that isn't
   built in.
+- **Telemetry** — observe the OAuth flow with `:telemetry`, without Amur taking
+  on any state or imposing a logging strategy.
 - **Igniter installer** — get started in under 60 seconds.
 
 ## What Amur does not do
@@ -71,6 +73,7 @@ If anything fails along the way, your `:on_failure` callback is invoked instead.
 | `Amur.Callback` | The behaviour for handling the result of a flow (`on_success/2`, `on_failure/2`). |
 | `Amur.User` | The type of the normalized user passed to your callbacks. |
 | `Amur.Page` | Renders the optional sign-in page and serves its assets. |
+| `Amur.Telemetry.Events` | Documents the `:telemetry` events emitted by the OAuth flow. |
 | `Amur.Providers.*` | The built-in provider modules. |
 
 ## Where to go next
@@ -83,3 +86,4 @@ If anything fails along the way, your `:on_failure` callback is invoked instead.
   callbacks in detail.
 - [Custom providers](custom_providers.html) — define a provider that isn't built in.
 - [Sign-in page](sign_in_page.html) — the bundled page, its logo, and its assets.
+- [Telemetry](telemetry.html) — the events emitted by the OAuth flow.
