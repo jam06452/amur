@@ -256,32 +256,40 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_router(igniter, true, router) do
-    if phoenix_router_mounted?(igniter, router) do
-      Igniter.add_notice(
-        igniter,
-        "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
-      )
-    else
-      {igniter, has_browser_pipeline?} =
-        Phoenix.has_pipeline(igniter, router, :browser)
+    case phoenix_router_mounted?(igniter, router) do
+      :mounted ->
+        Igniter.add_notice(
+          igniter,
+          "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+        )
 
-      contents =
-        if has_browser_pipeline? do
-          """
-          pipe_through :browser
-          forward "/", Amur.Router
-          """
-        else
-          "forward \"/\", Amur.Router"
-        end
+      :not_found ->
+        Igniter.add_warning(
+          igniter,
+          "Could not find the Phoenix router #{inspect(router)} to patch."
+        )
 
-      Phoenix.add_scope(
-        igniter,
-        "/auth",
-        contents,
-        router: router,
-        arg2: [alias: false]
-      )
+      :not_mounted ->
+        {igniter, has_browser_pipeline?} =
+          Phoenix.has_pipeline(igniter, router, :browser)
+
+        contents =
+          if has_browser_pipeline? do
+            """
+            pipe_through :browser
+            forward "/", Amur.Router
+            """
+          else
+            "forward \"/\", Amur.Router"
+          end
+
+        Phoenix.add_scope(
+          igniter,
+          "/auth",
+          contents,
+          router: router,
+          arg2: [alias: false]
+        )
     end
   end
 
@@ -312,16 +320,23 @@ defmodule Mix.Tasks.Amur.Install do
   # Only a `forward "/", Amur.Router` inside the `/auth` scope counts: a project
   # that forwards Amur somewhere else (for example `/oauth`) still needs the
   # documented `/auth` mount, so a whole-file match would wrongly skip it.
+  #
+  # Returns `:mounted`, `:not_mounted`, or `:not_found` when the router module
+  # cannot be located, so the caller can warn instead of crashing downstream.
   defp phoenix_router_mounted?(igniter, router) do
     case Igniter.Project.Module.find_module(igniter, router) do
       {:ok, {_igniter, _source, zipper}} ->
-        zipper
-        |> Zipper.topmost()
-        |> Zipper.node()
-        |> auth_scope_amur_forward?()
+        if zipper
+           |> Zipper.topmost()
+           |> Zipper.node()
+           |> auth_scope_amur_forward?() do
+          :mounted
+        else
+          :not_mounted
+        end
 
       _ ->
-        false
+        :not_found
     end
   end
 

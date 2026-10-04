@@ -1447,4 +1447,39 @@ defmodule Mix.Tasks.Amur.InstallTest do
     router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
     assert router =~ ~s|forward("/", Amur.Router)|
   end
+
+  test "warns when the Phoenix router cannot be located" do
+    # `list_routers/1` scans every Elixir source, but `find_module/2` skips
+    # `_test.exs` files, so a router defined there is selected yet cannot be
+    # patched. The installer must warn rather than crash in `has_pipeline/3`.
+    router = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+
+      pipeline :browser do
+        plug :accepts, ["html"]
+      end
+
+      scope "/", SampleWeb do
+        pipe_through :browser
+      end
+    end
+    """
+
+    {:ok, igniter, %{warnings: warnings}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Placeholder do\nend\n",
+          "lib/sample_web/router_test.exs" => router
+        }
+      )
+
+    assert Enum.any?(
+             warnings,
+             &String.contains?(&1, "Could not find the Phoenix router SampleWeb.Router")
+           )
+
+    assert igniter.assigns[:test_files]["lib/sample_web/router_test.exs"] =~ "use Phoenix.Router"
+  end
 end
