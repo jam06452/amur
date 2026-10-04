@@ -62,7 +62,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "github: ["
     assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
     assert runtime =~ "SampleWeb.AuthController.on_success/2"
-    assert runtime =~ "System.fetch_env!(\"BASE_URL\") || \"http://localhost:4000\""
+    assert runtime =~ "System.get_env(\"BASE_URL\") || \"http://localhost:4000\""
     refute runtime =~ "Endpoint.url()"
     refute runtime =~ "AMUR_DOTENV_LOADER"
     assert runtime =~ "Mix.env() != :test"
@@ -415,7 +415,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
     runtime = igniter.assigns[:test_files]["config/runtime.exs"]
     assert runtime =~ ~s|app_name: "sample"|
     assert runtime =~ ~s|base_url: "https://example.com"|
-    refute runtime =~ "System.fetch_env!(\"BASE_URL\")"
+    refute runtime =~ "System.get_env(\"BASE_URL\")"
     refute runtime =~ "File.exists?(\".env\")"
     refute runtime =~ "google: ["
   end
