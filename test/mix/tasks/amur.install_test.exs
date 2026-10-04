@@ -157,6 +157,16 @@ defmodule Mix.Tasks.Amur.InstallTest do
     refute igniter.assigns[:test_files]["lib/sample_web/router.ex"] =~ "forward"
   end
 
+  test "does not tell the user to mount the router when --no-router is passed" do
+    # `--no-router` means the user opted out of mounting, so the next steps must
+    # not claim the router is unmounted. The flow step is still shown.
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(["--app", "sample", "--no-router", "--yes"], %{})
+
+    refute Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    assert Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
+  end
+
   test "leaves an existing auth controller unchanged" do
     existing = """
     defmodule SampleWeb.AuthController do

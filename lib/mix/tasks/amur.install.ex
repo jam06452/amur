@@ -77,7 +77,7 @@ defmodule Mix.Tasks.Amur.Install do
     providers = resolve_providers(opts)
     validate_controller_options!(igniter, opts, web_module)
 
-    {igniter, router_mounted?} =
+    {igniter, router_status} =
       igniter
       |> maybe_add_controller(opts, web_module, phoenix?)
       |> maybe_add_router(opts, phoenix?, router)
@@ -85,7 +85,7 @@ defmodule Mix.Tasks.Amur.Install do
     igniter
     |> maybe_add_config(opts, web_module, providers, phoenix?)
     |> maybe_add_page(opts, app_name)
-    |> queue_next_steps(web_module, providers, opts, router_mounted?)
+    |> queue_next_steps(web_module, providers, opts, router_status)
   end
 
   defp detect_phoenix(igniter) do
@@ -250,16 +250,20 @@ defmodule Mix.Tasks.Amur.Install do
     """
   end
 
+  # Returns `{igniter, router_status}` where `router_status` is one of:
+  #
+  #   * `:mounted` - Amur.Router is mounted (already, or by this run)
+  #   * `:not_mounted` - mounting was attempted and failed, so the user must do it
+  #   * `:skipped` - the user passed `--no-router`, so the installer did not look
+  #
+  # The three states are kept distinct so the next steps only tell the user to
+  # mount Amur.Router when mounting actually failed, rather than also when they
+  # explicitly opted out.
   defp maybe_add_router(igniter, opts, phoenix?, router) do
-    cond do
-      opts[:router] == false ->
-        {igniter, false}
-
-      phoenix? ->
-        add_router(igniter, true, router)
-
-      true ->
-        add_router(igniter, false, router)
+    if opts[:router] == false do
+      {igniter, :skipped}
+    else
+      add_router(igniter, phoenix?, router)
     end
   end
 
@@ -269,7 +273,7 @@ defmodule Mix.Tasks.Amur.Install do
         {Igniter.add_notice(
            igniter,
            "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
-         ), true}
+         ), :mounted}
 
       :not_found ->
         # `select_router/1` can name a router that `find_module/2` cannot locate,
@@ -278,7 +282,7 @@ defmodule Mix.Tasks.Amur.Install do
         {Igniter.add_warning(
            igniter,
            "Could not find the Phoenix router #{inspect(router)} to mount Amur.Router."
-         ), false}
+         ), :not_mounted}
 
       false ->
         {igniter, has_browser_pipeline?} =
@@ -300,7 +304,7 @@ defmodule Mix.Tasks.Amur.Install do
            contents,
            router: router,
            arg2: [alias: false]
-         ), true}
+         ), :mounted}
     end
   end
 
@@ -318,10 +322,11 @@ defmodule Mix.Tasks.Amur.Install do
            igniter,
            module,
            &update_plug_router/1
-         ), true}
+         ), :mounted}
 
       [] ->
-        {Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch."), false}
+        {Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch."),
+         :not_mounted}
     end
   end
 
@@ -675,7 +680,7 @@ defmodule Mix.Tasks.Amur.Install do
     end)
   end
 
-  defp queue_next_steps(igniter, web_module, providers, opts, router_mounted?) do
+  defp queue_next_steps(igniter, web_module, providers, opts, router_status) do
     provider_example = List.first(providers, :github)
 
     next_steps =
@@ -699,7 +704,7 @@ defmodule Mix.Tasks.Amur.Install do
 
         flow_step =
           cond do
-            not router_mounted? ->
+            router_status == :not_mounted ->
               "      3. Mount Amur.Router in your router before starting a flow."
 
             opts[:page] ->
