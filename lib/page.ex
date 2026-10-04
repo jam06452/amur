@@ -12,10 +12,16 @@ defmodule Amur.Page do
   its assets are read from Amur's own `priv/` directory, so no files need to be
   copied into the host application.
 
-  The template is compiled into `render_page/3` when Amur is compiled, and the
+  The template is compiled into `render_page/6` when Amur is compiled, and the
   template file is registered as an external resource, so editing it rebuilds
-  the page on the next compile. The provider list is resolved per request, so
-  adding a provider to the application configuration is reflected immediately.
+  the page on the next compile.
+
+  The rendered body is memoized in `:persistent_term`, keyed on the inputs that
+  affect it (the provider list, the application name, and the logo). The mount
+  point is not part of the key: it is substituted into the cached body per
+  request, so one render serves every mount point. A change to the configured
+  providers therefore produces a new cache entry on the next request, without a
+  restart, while an unchanged configuration reuses the cached body.
   """
 
   import Plug.Conn
@@ -25,6 +31,12 @@ defmodule Amur.Page do
   @template Path.join(@templates_dir, "sign_in.html.eex")
 
   @external_resource @template
+
+  # Stands in for the mount point while the body is rendered and cached. It is
+  # replaced per request, so the cached body is independent of where the router
+  # is mounted. The value is not valid HTML, so a missed substitution is visible
+  # rather than silently producing a broken link.
+  @base_placeholder "\u0000amur-base\u0000"
 
   require EEx
 
@@ -85,22 +97,60 @@ defmodule Amur.Page do
         |> send_resp(404, "No Amur providers are configured.")
 
       providers ->
-        base = base_path(conn)
-
         body =
-          render_page(
-            providers,
-            app_name(),
-            logo(providers),
-            base,
-            &provider_icon/1,
-            &provider_label/1
-          )
+          cached_body(providers, app_name(), logo(providers))
+          |> String.replace(@base_placeholder, base_path(conn))
 
         conn
         |> put_resp_content_type("text/html")
         |> send_resp(200, body)
     end
+  end
+
+  # Returns the rendered body for the given inputs, rendering it once and
+  # caching it in `:persistent_term` under a key derived from those inputs.
+  #
+  # The key covers everything that affects the body except the mount point, so a
+  # configuration change yields a different key and a fresh render, while a
+  # repeated request with the same configuration reuses the cached body. The
+  # inputs are read per request to build the key, which is cheap (an application
+  # environment lookup) compared with re-rendering the template.
+  #
+  # The provider modules are part of the key, not just the provider names: two
+  # configurations can name the same provider but resolve it to different
+  # modules, and the module determines the icon rendered on the button.
+  defp cached_body(providers, app_name, logo) do
+    key = {__MODULE__, :body, providers, provider_modules(providers), app_name, logo}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        body =
+          render_page(
+            providers,
+            app_name,
+            logo,
+            @base_placeholder,
+            &provider_icon/1,
+            &provider_label/1
+          )
+
+        :persistent_term.put(key, body)
+        body
+
+      body ->
+        body
+    end
+  end
+
+  # Resolves each provider name to its module, preserving order so the key
+  # distinguishes configurations that differ only in which module a name maps
+  # to. Every name is guaranteed to resolve: the caller passes the result of
+  # `Amur.Config.configured_providers/0`, which filters out unresolvable names.
+  defp provider_modules(providers) do
+    Enum.map(providers, fn provider ->
+      {:ok, {module, _config}} = Amur.Config.resolve(provider)
+      module
+    end)
   end
 
   # Provider icons are inlined so their `currentColor` fills follow the page's
