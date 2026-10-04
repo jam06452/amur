@@ -13,6 +13,7 @@ defmodule Amur.MixProject do
         "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
       aliases: aliases(),
       cli: cli(),
+      elixirc_options: [warnings_as_errors: true],
       dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
       package: package(),
