@@ -30,16 +30,24 @@ defmodule Amur.Controller do
   connection returned by the configured failure callback.
   """
   def request(conn, %{"provider" => provider}) do
-    Amur.Telemetry.span([:amur, :request], %{provider: resolve_provider(provider)}, fn ->
-      case do_request(conn, provider) do
-        {:ok, conn, strategy} ->
-          {conn, %{result: :ok, strategy: strategy}}
+    result =
+      Amur.Telemetry.span([:amur, :request], %{provider: resolve_provider(provider)}, fn ->
+        case do_request(conn, provider) do
+          {:ok, conn, strategy} ->
+            {{:ok, conn}, %{result: :ok, strategy: strategy}}
 
-        {:error, reason} ->
-          {handle_failure(conn, reason),
-           %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
-      end
-    end)
+          {:error, reason} ->
+            {{:error, reason}, %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+        end
+      end)
+
+    case result do
+      {:ok, conn} ->
+        conn
+
+      {:error, reason} ->
+        handle_failure(conn, reason)
+    end
   end
 
   defp do_request(conn, provider) do
@@ -77,8 +85,7 @@ defmodule Amur.Controller do
             {{:ok, user, token}, %{result: :ok, strategy: strategy}}
 
           {:error, reason} ->
-            {{:error, handle_failure(conn, reason)},
-             %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
+            {{:error, reason}, %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}}
         end
       end)
 
@@ -87,8 +94,8 @@ defmodule Amur.Controller do
         on_success = Application.fetch_env!(:amur, :on_success)
         on_success.(conn, %{user: user, token: token})
 
-      {:error, conn} ->
-        conn
+      {:error, reason} ->
+        handle_failure(conn, reason)
     end
   end
 
@@ -110,13 +117,15 @@ defmodule Amur.Controller do
   # Resolves the provider name for telemetry metadata without touching the atom
   # table. The request parameter is matched against the configured provider keys
   # rather than converted with `String.to_existing_atom/1`, so a path like
-  # `/auth/ok` cannot label a metric with an unrelated existing atom. Unknown
-  # providers report `nil`, keeping metric labels bounded.
+  # `/auth/ok` cannot label a metric with an unrelated existing atom. A name that
+  # is configured but does not resolve (for example a provider whose value is not
+  # a module or credentials) reports `nil`, so the label always agrees with the
+  # outcome of `Amur.Config.resolve/1` and metric labels stay bounded.
   defp resolve_provider(provider) do
     configured = Application.get_env(:amur, :providers, [])
 
     Enum.find_value(configured, fn {name, _value} ->
-      if to_string(name) == provider, do: name
+      if to_string(name) == provider and match?({:ok, _}, Amur.Config.resolve(name)), do: name
     end)
   end
 

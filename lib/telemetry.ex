@@ -17,8 +17,9 @@ defmodule Amur.Telemetry do
   #
   # Metadata never carries the connection, the session, tokens, credentials, or
   # the raw user map. The provider is reported as the resolved provider atom, or
-  # `nil` when the request names a provider that is not configured, so metric
-  # labels stay bounded and a request cannot grow the VM atom table.
+  # `nil` when the request names a provider that is not configured or does not
+  # resolve, so metric labels stay bounded and a request cannot grow the VM atom
+  # table.
   #
   # Failure reasons are reduced to a small set of categories before they are
   # emitted; the raw term is never included. See `sanitize_reason/1`.

@@ -159,6 +159,27 @@ defmodule Amur.TelemetryTest do
       assert metadata.kind == :error
       assert %RuntimeError{message: "boom"} = metadata.reason
       assert is_list(metadata.stacktrace)
+
+      # `strategy` is only known once the provider has resolved, and an
+      # exception can be raised before that, so it is never on `:exception`.
+      refute Map.has_key?(metadata, :strategy)
+    end
+
+    test "emits a callback exception event and re-raises the original error" do
+      Application.put_env(:amur, :providers, raising: Amur.TelemetryTest.RaisingProvider)
+
+      assert_raise RuntimeError, "boom", fn ->
+        Amur.Controller.callback(callback_conn(), %{"provider" => "raising", "code" => "code"})
+      end
+
+      assert_receive {:telemetry, [:amur, :callback, :exception], measurements, metadata}
+
+      assert is_integer(measurements.duration)
+      assert metadata.provider == :raising
+      assert metadata.kind == :error
+      assert %RuntimeError{message: "boom"} = metadata.reason
+      assert is_list(metadata.stacktrace)
+      refute Map.has_key?(metadata, :strategy)
     end
 
     test "does not leak secrets through the stacktrace" do
@@ -183,6 +204,41 @@ defmodule Amur.TelemetryTest do
                _other ->
                  true
              end)
+    end
+  end
+
+  describe "span boundary" do
+    test "the failure callback runs outside the request span" do
+      # The `:on_failure` callback is host application code, so its duration must
+      # not be attributed to Amur. A slow callback must not inflate the span.
+      Application.put_env(:amur, :providers, [])
+
+      Application.put_env(:amur, :on_failure, fn conn, _reason ->
+        Process.sleep(200)
+        conn
+      end)
+
+      Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "missing"})
+
+      assert_receive {:telemetry, [:amur, :request, :stop], measurements, metadata}
+      assert metadata.result == :error
+
+      duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+      assert duration_ms < 100, "on_failure ran inside the span (#{duration_ms}ms)"
+    end
+
+    test "an exception raised by the failure callback is not an Amur exception" do
+      Application.put_env(:amur, :providers, [])
+      Application.put_env(:amur, :on_failure, fn _conn, _reason -> raise "on_failure boom" end)
+
+      assert_raise RuntimeError, "on_failure boom", fn ->
+        Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "missing"})
+      end
+
+      # The request span completed normally; the callback's crash is not
+      # reported as an `[:amur, :request, :exception]`.
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, %{result: :error}}
+      refute_receive {:telemetry, [:amur, :request, :exception], _measurements, _metadata}
     end
   end
 
@@ -236,6 +292,20 @@ defmodule Amur.TelemetryTest do
       Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "ok"})
 
       assert_receive {:telemetry, [:amur, :request, :start], _measurements, %{provider: nil}}
+    end
+
+    test "a configured provider that does not resolve is not used as a label" do
+      # The name is a key in `:providers`, but its value is neither a module nor
+      # credentials, so `Amur.Config.resolve/1` fails. The label must agree with
+      # that outcome rather than reporting the configured atom.
+      Application.put_env(:amur, :providers, weird: "not-a-module")
+
+      Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "weird"})
+
+      assert_receive {:telemetry, [:amur, :request, :start], _measurements, %{provider: nil}}
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.result == :error
+      assert metadata.reason == :unknown_provider
     end
   end
 
@@ -307,6 +377,7 @@ defmodule Amur.TelemetryTest do
 
   defmodule RaisingStrategy do
     def authorize_url(_config), do: raise("boom")
+    def callback(_config, _params), do: raise("boom")
   end
 
   # Raises a FunctionClauseError whose arguments include the provider config, so

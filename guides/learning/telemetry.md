@@ -23,10 +23,10 @@ Each span produces the three standard `:telemetry` events:
 |---|---|---|
 | `[:amur, :request, :start]` | `system_time` | `provider` |
 | `[:amur, :request, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
-| `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `strategy`, `kind`, `reason`, `stacktrace` |
+| `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
 | `[:amur, :callback, :start]` | `system_time` | `provider` |
 | `[:amur, :callback, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
-| `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `strategy`, `kind`, `reason`, `stacktrace` |
+| `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
 
 `duration` is in native time units, as produced by `System.monotonic_time/0`.
 `:telemetry.span/3` also adds a `telemetry_span_context` to the `:stop` and
@@ -36,8 +36,8 @@ Each span produces the three standard `:telemetry` events:
 
 | Key | Description |
 |---|---|
-| `provider` | The resolved provider atom, such as `:github`, or `nil` when the request names a provider that is not configured. |
-| `strategy` | The Assent strategy module, present on `:stop` and `:exception` once the provider has resolved. |
+| `provider` | The resolved provider atom, such as `:github`, or `nil` when the request names a provider that is not configured or does not resolve. |
+| `strategy` | The Assent strategy module, present on `:stop` once the provider has resolved. It is not present on `:exception`, because an exception can be raised before the strategy is known. |
 | `result` | `:ok` or `:error`, present on `:stop`. |
 | `reason` | A sanitized failure category, present on `:stop` when `result` is `:error`. |
 | `kind`, `reason`, `stacktrace` | The failure details on `:exception`. |
@@ -45,9 +45,10 @@ Each span produces the three standard `:telemetry` events:
 Metadata never includes the connection, the session, the OAuth token, the
 normalized user, or any provider credentials.
 
-The `provider` is reported as the resolved provider atom, or `nil` for an
-unknown provider. It is never the raw string from the URL, so metric labels stay
-bounded and a request cannot grow the VM atom table.
+The `provider` is reported as the resolved provider atom, or `nil` for a
+provider that is not configured or does not resolve. It is never the raw string
+from the URL, so metric labels stay bounded and a request cannot grow the VM atom
+table.
 
 ## Failure reasons
 
@@ -99,8 +100,8 @@ Count failures by category:
 :telemetry.attach(
   "amur-failures",
   [:amur, :callback, :stop],
-  fn _event, _measurements, %{result: :error, reason: reason}, _config ->
-    :telemetry.execute([:my_app, :auth, :failure], %{count: 1}, %{reason: reason})
+  fn _event, _measurements, %{result: :error} = metadata, _config ->
+    :telemetry.execute([:my_app, :auth, :failure], %{count: 1}, %{reason: metadata.reason})
   end,
   nil
 )

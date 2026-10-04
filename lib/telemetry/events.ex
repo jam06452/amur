@@ -25,10 +25,10 @@ defmodule Amur.Telemetry.Events do
   |---|---|---|
   | `[:amur, :request, :start]` | `system_time` | `provider` |
   | `[:amur, :request, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
-  | `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `strategy`, `kind`, `reason`, `stacktrace` |
+  | `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
   | `[:amur, :callback, :start]` | `system_time` | `provider` |
   | `[:amur, :callback, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
-  | `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `strategy`, `kind`, `reason`, `stacktrace` |
+  | `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
 
   `duration` is in native time units, as produced by `System.monotonic_time/0`.
   `:telemetry.span/3` also adds a `telemetry_span_context` to the `:stop` and
@@ -38,8 +38,8 @@ defmodule Amur.Telemetry.Events do
 
   | Key | Description |
   |---|---|
-  | `provider` | The resolved provider atom, such as `:github`, or `nil` when the request names a provider that is not configured. |
-  | `strategy` | The Assent strategy module, present on `:stop` and `:exception` once the provider has resolved. |
+  | `provider` | The resolved provider atom, such as `:github`, or `nil` when the request names a provider that is not configured or does not resolve. |
+  | `strategy` | The Assent strategy module, present on `:stop` once the provider has resolved. It is not present on `:exception`, because an exception can be raised before the strategy is known. |
   | `result` | `:ok` or `:error`, present on `:stop`. |
   | `reason` | A sanitized failure category, present on `:stop` when `result` is `:error`. See below. |
   | `kind`, `reason`, `stacktrace` | The failure details on `:exception`, matching `:telemetry.span/3`. |
