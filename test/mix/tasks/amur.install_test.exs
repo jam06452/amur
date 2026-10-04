@@ -229,6 +229,27 @@ defmodule Mix.Tasks.Amur.InstallTest do
            )
   end
 
+  test "does not point at an unmounted route when no Plug router can be found" do
+    # With config generation enabled the next steps reach the flow step. Since no
+    # Plug.Router was patched, the user must be told to mount Amur.Router rather
+    # than pointed at a route that was never mounted. The controller is supplied
+    # so config generation is permitted without `--no-controller`.
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
+          "lib/sample.ex" => "defmodule Sample do\nend\n",
+          "lib/sample_web/controllers/auth_controller.ex" =>
+            "defmodule SampleWeb.AuthController do\nend\n"
+        }
+      )
+
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+  end
+
   test "requires an existing controller when configuration is requested without generation" do
     assert_raise Mix.Error, ~r/--no-controller cannot be combined/, fn ->
       apply_install(["--app", "sample", "--no-controller", "--yes"])

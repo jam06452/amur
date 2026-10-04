@@ -259,7 +259,7 @@ defmodule Mix.Tasks.Amur.Install do
         add_router(igniter, true, router)
 
       true ->
-        {add_router(igniter, false, router), true}
+        add_router(igniter, false, router)
     end
   end
 
@@ -314,14 +314,14 @@ defmodule Mix.Tasks.Amur.Install do
 
     case modules do
       [module | _] ->
-        ProjectModule.find_and_update_module!(
-          igniter,
-          module,
-          &update_plug_router/1
-        )
+        {ProjectModule.find_and_update_module!(
+           igniter,
+           module,
+           &update_plug_router/1
+         ), true}
 
       [] ->
-        Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch.")
+        {Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch."), false}
     end
   end
 
