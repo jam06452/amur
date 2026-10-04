@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Amur.InstallTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   defp apply_install(args, files \\ %{}) do
     {:ok, igniter, _messages} = apply_install_with_messages(args, files)
@@ -893,6 +893,42 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     router = igniter.assigns[:test_files]["lib/sample/router.ex"]
     assert router =~ ~s|forward("/auth", to: Amur.Router)|
+  end
+
+  test "warns when the detected Phoenix router cannot be located" do
+    # `select_router/1` resolves the router through an alias, so it can name a
+    # module that `find_module/2` cannot find. The installer must warn rather
+    # than crash while trying to read the router's pipelines.
+    {:ok, _igniter, %{warnings: warnings}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.NotARouter do\nend\n",
+          "lib/weird/thing.ex" => """
+          alias SampleWeb.Router
+
+          defmodule Router do
+            use Phoenix.Router
+
+            pipeline :browser do
+              plug :accepts, ["html"]
+            end
+
+            scope "/", SampleWeb do
+              pipe_through :browser
+            end
+          end
+          """
+        }
+      )
+
+    assert Enum.any?(
+             warnings,
+             &String.contains?(
+               &1,
+               "Could not find the Phoenix router SampleWeb.Router to mount Amur.Router."
+             )
+           )
   end
 
   test "ignores an alias whose target is not a module alias" do

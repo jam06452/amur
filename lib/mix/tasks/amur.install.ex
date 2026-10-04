@@ -256,32 +256,43 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp add_router(igniter, true, router) do
-    if phoenix_router_mounted?(igniter, router) do
-      Igniter.add_notice(
-        igniter,
-        "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
-      )
-    else
-      {igniter, has_browser_pipeline?} =
-        Phoenix.has_pipeline(igniter, router, :browser)
+    case phoenix_router_mounted?(igniter, router) do
+      true ->
+        Igniter.add_notice(
+          igniter,
+          "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+        )
 
-      contents =
-        if has_browser_pipeline? do
-          """
-          pipe_through :browser
-          forward "/", Amur.Router
-          """
-        else
-          "forward \"/\", Amur.Router"
-        end
+      :not_found ->
+        # `select_router/1` can name a router that `find_module/2` cannot locate,
+        # for example one defined through an alias. `Phoenix.has_pipeline/3`
+        # would raise on that module, so warn instead of crashing the installer.
+        Igniter.add_warning(
+          igniter,
+          "Could not find the Phoenix router #{inspect(router)} to mount Amur.Router."
+        )
 
-      Phoenix.add_scope(
-        igniter,
-        "/auth",
-        contents,
-        router: router,
-        arg2: [alias: false]
-      )
+      false ->
+        {igniter, has_browser_pipeline?} =
+          Phoenix.has_pipeline(igniter, router, :browser)
+
+        contents =
+          if has_browser_pipeline? do
+            """
+            pipe_through :browser
+            forward "/", Amur.Router
+            """
+          else
+            "forward \"/\", Amur.Router"
+          end
+
+        Phoenix.add_scope(
+          igniter,
+          "/auth",
+          contents,
+          router: router,
+          arg2: [alias: false]
+        )
     end
   end
 
@@ -320,8 +331,8 @@ defmodule Mix.Tasks.Amur.Install do
         |> Zipper.node()
         |> auth_scope_amur_forward?()
 
-      _ ->
-        false
+      {:error, _igniter} ->
+        :not_found
     end
   end
 
