@@ -99,9 +99,11 @@ defmodule Amur.Telemetry do
   def sanitize_reason(%{__struct__: Assent.CallbackError}), do: :provider_error
 
   # Transport-level failures, which are worth distinguishing from a provider
-  # that answered with an error. Assent wraps every adapter failure (including
-  # `Mint.TransportError`, `Mint.HTTPError` and `:timeout`) in this struct, so
-  # matching it here covers all of them; the raw terms never reach Amur.
+  # that answered with an error. Adapter failures raised through
+  # `Assent.HTTPAdapter` (including `Mint.TransportError`, `Mint.HTTPError` and
+  # `:timeout`) are wrapped in this struct, so matching it here covers them; the
+  # raw terms never reach Amur. `Mint` is only a transitive dependency, so
+  # matching its structs directly would also be a latent compile-order hazard.
   def sanitize_reason(%{__struct__: Assent.ServerUnreachableError}), do: :network_error
 
   def sanitize_reason(_reason), do: :provider_error

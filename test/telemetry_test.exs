@@ -229,11 +229,15 @@ defmodule Amur.TelemetryTest do
   describe "span boundary" do
     test "the failure callback runs outside the request span" do
       # The `:on_failure` callback is host application code, so its duration must
-      # not be attributed to Amur. A slow callback must not inflate the span.
+      # not be attributed to Amur. Assert the ordering structurally rather than
+      # with a wall-clock threshold: the callback records the monotonic time at
+      # which it ran, and that must be at or after the span's stop time.
       Application.put_env(:amur, :providers, [])
 
+      test_pid = self()
+
       Application.put_env(:amur, :on_failure, fn conn, _reason ->
-        Process.sleep(200)
+        send(test_pid, {:on_failure_ran_at, System.monotonic_time()})
         conn
       end)
 
@@ -242,8 +246,10 @@ defmodule Amur.TelemetryTest do
       assert_receive {:telemetry, [:amur, :request, :stop], measurements, metadata}
       assert metadata.result == :error
 
-      duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-      assert duration_ms < 100, "on_failure ran inside the span (#{duration_ms}ms)"
+      assert_receive {:on_failure_ran_at, callback_time}
+
+      assert callback_time >= measurements.monotonic_time,
+             "on_failure ran inside the span (callback #{callback_time} < stop #{measurements.monotonic_time})"
     end
 
     test "an exception raised by the failure callback is not an Amur exception" do
@@ -325,6 +331,34 @@ defmodule Amur.TelemetryTest do
       assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
       assert metadata.result == :error
       assert metadata.reason == :unknown_provider
+    end
+
+    test "a non-binary provider parameter is not used as a label" do
+      # A malformed query such as `?provider[]=x` yields a list. It matches no
+      # configured key, so the label is `nil` and the flow fails cleanly rather
+      # than raising inside `Amur.Config.resolve/1`.
+      Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => ["fake"]})
+
+      assert_receive {:telemetry, [:amur, :request, :start], _measurements, %{provider: nil}}
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.result == :error
+      assert metadata.reason == :unknown_provider
+    end
+
+    test "a provider that raises while resolving is reported as an exception" do
+      # Resolution runs before the span body, so a raising `base_config/0` must
+      # not crash the request outside the span with no telemetry emitted.
+      Application.put_env(:amur, :providers,
+        raising_config: Amur.TelemetryTest.RaisingConfigProvider
+      )
+
+      assert_raise RuntimeError, "config boom", fn ->
+        Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "raising_config"})
+      end
+
+      assert_receive {:telemetry, [:amur, :request, :exception], _measurements, metadata}
+      assert metadata.provider == :raising_config
+      assert %RuntimeError{message: "config boom"} = metadata.reason
     end
   end
 
@@ -438,6 +472,16 @@ defmodule Amur.TelemetryTest do
     use Amur.Provider
     def strategy, do: Amur.TelemetryTest.LeakingStrategy
     def base_config, do: [client_secret: "super-secret-value"]
+    def normalize_user(user), do: user
+  end
+
+  # Raises while building its config, which happens during provider resolution
+  # before the span body runs. The request must still emit a span rather than
+  # crash outside it with no telemetry.
+  defmodule RaisingConfigProvider do
+    use Amur.Provider
+    def strategy, do: Amur.TelemetryTest.Strategy
+    def base_config, do: raise("config boom")
     def normalize_user(user), do: user
   end
 end

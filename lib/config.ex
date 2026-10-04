@@ -59,6 +59,25 @@ defmodule Amur.Config do
     |> Enum.filter(&match?({:ok, _}, resolve(&1)))
   end
 
+  # Reports whether a provider name is configured and maps to a usable module,
+  # without building its configuration.
+  #
+  # `resolve/1` calls `module.base_config/0`, which is provider code and may be
+  # expensive or raise. This predicate answers the same question as `resolve/1`
+  # for a *configured* name - is there a module to dispatch to - using only the
+  # shape of the configured value, so it is safe to call before a span opens to
+  # label telemetry. A provider whose `base_config/0` raises is still resolvable:
+  # the name is valid and the failure belongs to the provider, not the lookup.
+  def resolvable?(provider) when is_atom(provider) do
+    case Keyword.fetch(Application.get_env(:amur, :providers, []), provider) do
+      {:ok, module} when is_atom(module) -> true
+      {:ok, _credentials} -> Map.has_key?(@built_ins, provider)
+      :error -> false
+    end
+  end
+
+  def resolvable?(_provider), do: false
+
   # Resolves a provider name supplied by a router or application.
   #
   # Binary names are converted only to existing atoms, preventing arbitrary
@@ -90,6 +109,11 @@ defmodule Amur.Config do
         {:error, :unknown_provider}
     end
   end
+
+  # A malformed request parameter (for example `?provider[]=x`, which Plug parses
+  # as a list) is not a provider name, so it fails cleanly rather than raising a
+  # `FunctionClauseError` from the guards above.
+  def resolve(_provider), do: {:error, :unknown_provider}
 
   defp build_config(module, provider) do
     configured_providers = Application.get_env(:amur, :providers, [])

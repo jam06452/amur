@@ -37,7 +37,7 @@ defmodule Amur.Controller do
             {{:ok, conn}, %{result: :ok, strategy: strategy}}
 
           {:error, reason, strategy} ->
-            {{:error, reason}, stop_metadata(:error, reason, strategy)}
+            {{:error, reason}, stop_metadata(reason, strategy)}
         end
       end)
 
@@ -95,7 +95,7 @@ defmodule Amur.Controller do
             {{:ok, user, token}, %{result: :ok, strategy: strategy}}
 
           {:error, reason, strategy} ->
-            {{:error, reason}, stop_metadata(:error, reason, strategy)}
+            {{:error, reason}, stop_metadata(reason, strategy)}
         end
       end)
 
@@ -136,7 +136,7 @@ defmodule Amur.Controller do
   # resolved far enough to know it, so a handler can rely on the key being
   # present whenever the failure came from the strategy rather than from
   # resolving the provider itself.
-  defp stop_metadata(:error, reason, strategy) do
+  defp stop_metadata(reason, strategy) do
     metadata = %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}
     if strategy, do: Map.put(metadata, :strategy, strategy), else: metadata
   end
@@ -148,11 +148,17 @@ defmodule Amur.Controller do
   # is configured but does not resolve (for example a provider whose value is not
   # a module or credentials) reports `nil`, so the label always agrees with the
   # outcome of `Amur.Config.resolve/1` and metric labels stay bounded.
+  #
+  # This runs before the span opens, so it must not call provider code:
+  # `Amur.Config.resolvable?/1` answers the same question as `resolve/1` from the
+  # shape of the configured value alone. The actual resolution happens inside the
+  # span body, so a provider whose `base_config/0` raises is reported as an
+  # `:exception` event rather than crashing the request with no telemetry.
   defp resolve_provider(provider) do
     configured = Application.get_env(:amur, :providers, [])
 
     Enum.find_value(configured, nil, fn {name, _value} ->
-      if to_string(name) == provider and match?({:ok, _}, Amur.Config.resolve(name)), do: name
+      if to_string(name) == provider and Amur.Config.resolvable?(name), do: name
     end)
   end
 
