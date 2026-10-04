@@ -52,14 +52,18 @@ defmodule Amur.MixProject do
       "guides/learning/configuration.md",
       "guides/learning/oauth_flow.md",
       "guides/learning/custom_providers.md",
-      "guides/learning/sign_in_page.md"
+      "guides/learning/sign_in_page.md",
+
+      # Reference
+      "CHANGELOG.md"
     ]
   end
 
   defp groups_for_extras do
     [
       Introduction: ~r{guides/(overview|introduction/.+)\.md},
-      Learning: ~r{guides/learning/.+}
+      Learning: ~r{guides/learning/.+},
+      Reference: ~r{CHANGELOG\.md}
     ]
   end
 
