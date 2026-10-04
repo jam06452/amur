@@ -68,9 +68,16 @@ defmodule Amur.Config do
   # shape of the configured value, so it is safe to call before a span opens to
   # label telemetry. A provider whose `base_config/0` raises is still resolvable:
   # the name is valid and the failure belongs to the provider, not the lookup.
-  def resolvable?(provider) when is_atom(provider) do
+  #
+  # `nil` is an atom but not a module, so it is excluded explicitly: a
+  # `providers: [foo: nil]` entry would otherwise be reported as resolvable while
+  # `resolve/1` raises on `nil.base_config/0`.
+  #
+  # Public only because `Amur.Controller` calls it; not part of the documented
+  # API (the module is `@moduledoc false`).
+  def resolvable?(provider) when is_atom(provider) and not is_nil(provider) do
     case Keyword.fetch(Application.get_env(:amur, :providers, []), provider) do
-      {:ok, module} when is_atom(module) -> true
+      {:ok, module} when is_atom(module) and not is_nil(module) -> true
       {:ok, _credentials} -> Map.has_key?(@built_ins, provider)
       :error -> false
     end

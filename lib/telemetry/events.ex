@@ -24,10 +24,10 @@ defmodule Amur.Telemetry.Events do
   | Event | Measurements | Metadata |
   |---|---|---|
   | `[:amur, :request, :start]` | `system_time` | `provider` |
-  | `[:amur, :request, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
+  | `[:amur, :request, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, and `reason` on failure |
   | `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
   | `[:amur, :callback, :start]` | `system_time` | `provider` |
-  | `[:amur, :callback, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, `reason` |
+  | `[:amur, :callback, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, and `reason` on failure |
   | `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
 
   `duration` is in native time units, as produced by `System.monotonic_time/0`.

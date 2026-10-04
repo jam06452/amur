@@ -24,18 +24,19 @@ defmodule Amur.Telemetry do
   # Failure reasons are reduced to a small set of categories before they are
   # emitted; the raw term is never included. See `sanitize_reason/1`.
 
-  @doc """
-  Runs `fun` inside a span, emitting the `:start`, `:stop` and `:exception`
-  events for `event_prefix`.
-
-  `fun` must return `{result, stop_metadata}`, matching `:telemetry.span/3`.
-  `start_metadata` is emitted with the `:start` event; `stop_metadata` is merged
-  with the base metadata for the `:stop` and `:exception` events.
-
-  Exceptions raised by `fun` are re-raised unchanged, but with their stacktrace
-  scrubbed of function arguments, so a crash cannot leak provider configuration
-  through the `:exception` metadata.
-  """
+  # Runs `fun` inside a span, emitting the `:start`, `:stop` and `:exception`
+  # events for `event_prefix`.
+  #
+  # `fun` must return `{result, stop_metadata}`, matching `:telemetry.span/3`.
+  # `start_metadata` is emitted with the `:start` event; `stop_metadata` is merged
+  # with the base metadata for the `:stop` and `:exception` events.
+  #
+  # Exceptions raised by `fun` are re-raised unchanged, but with their stacktrace
+  # scrubbed of function arguments, so a crash cannot leak provider configuration
+  # through the `:exception` metadata.
+  #
+  # Public only because `Amur.Controller` calls it; not part of the documented
+  # API (the module is `@moduledoc false`).
   def span(event_prefix, start_metadata, fun) do
     :telemetry.span(event_prefix, start_metadata, fn ->
       {result, stop_metadata} = guarded(fun)

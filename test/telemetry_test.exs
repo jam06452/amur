@@ -345,6 +345,21 @@ defmodule Amur.TelemetryTest do
       assert metadata.reason == :unknown_provider
     end
 
+    test "an atom provider parameter is labelled with the resolved provider" do
+      # `Amur.Config.resolve/1` accepts an atom as well as a binary, so the label
+      # must agree with the outcome for both. Before the fix the comparison was
+      # `to_string(name) == provider`, which is false for an atom and labelled a
+      # successful request `nil`.
+      conn = Amur.Controller.request(start_conn(), %{"provider" => :fake})
+
+      assert conn.status == 302
+
+      assert_receive {:telemetry, [:amur, :request, :start], _measurements, %{provider: :fake}}
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.provider == :fake
+      assert metadata.result == :ok
+    end
+
     test "a provider that raises while resolving is reported as an exception" do
       # Resolution runs before the span body, so a raising `base_config/0` must
       # not crash the request outside the span with no telemetry emitted.

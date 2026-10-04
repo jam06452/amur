@@ -149,18 +149,28 @@ defmodule Amur.Controller do
   # a module or credentials) reports `nil`, so the label always agrees with the
   # outcome of `Amur.Config.resolve/1` and metric labels stay bounded.
   #
+  # The parameter may be a binary (the router passes the URL segment) or an atom
+  # (`Amur.Config.resolve/1` accepts both), so both are normalized before the
+  # comparison; otherwise an atom parameter would resolve successfully but be
+  # labelled `nil`.
+  #
   # This runs before the span opens, so it must not call provider code:
   # `Amur.Config.resolvable?/1` answers the same question as `resolve/1` from the
   # shape of the configured value alone. The actual resolution happens inside the
   # span body, so a provider whose `base_config/0` raises is reported as an
   # `:exception` event rather than crashing the request with no telemetry.
-  defp resolve_provider(provider) do
+  defp resolve_provider(provider) when is_binary(provider) or is_atom(provider) do
     configured = Application.get_env(:amur, :providers, [])
+    wanted = to_string(provider)
 
     Enum.find_value(configured, nil, fn {name, _value} ->
-      if to_string(name) == provider and Amur.Config.resolvable?(name), do: name
+      if to_string(name) == wanted and Amur.Config.resolvable?(name), do: name
     end)
   end
+
+  # A malformed parameter (for example `?provider[]=x`, which Plug parses as a
+  # list) is not a provider name, so it cannot label a metric.
+  defp resolve_provider(_provider), do: nil
 
   # Delegate failure handling to application code when a custom callback is
   # configured; otherwise use the default redirect handler.
