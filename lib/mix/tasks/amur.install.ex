@@ -77,12 +77,15 @@ defmodule Mix.Tasks.Amur.Install do
     providers = resolve_providers(opts)
     validate_controller_options!(igniter, opts, web_module)
 
+    {igniter, router_mounted?} =
+      igniter
+      |> maybe_add_controller(opts, web_module, phoenix?)
+      |> maybe_add_router(opts, phoenix?, router)
+
     igniter
-    |> maybe_add_controller(opts, web_module, phoenix?)
-    |> maybe_add_router(opts, phoenix?, router)
     |> maybe_add_config(opts, web_module, providers, phoenix?)
     |> maybe_add_page(opts, app_name)
-    |> queue_next_steps(web_module, providers, opts)
+    |> queue_next_steps(web_module, providers, opts, router_mounted?)
   end
 
   defp detect_phoenix(igniter) do
@@ -248,29 +251,34 @@ defmodule Mix.Tasks.Amur.Install do
   end
 
   defp maybe_add_router(igniter, opts, phoenix?, router) do
-    if opts[:router] == false do
-      igniter
-    else
-      add_router(igniter, phoenix?, router)
+    cond do
+      opts[:router] == false ->
+        {igniter, false}
+
+      phoenix? ->
+        add_router(igniter, true, router)
+
+      true ->
+        {add_router(igniter, false, router), true}
     end
   end
 
   defp add_router(igniter, true, router) do
     case phoenix_router_mounted?(igniter, router) do
       true ->
-        Igniter.add_notice(
-          igniter,
-          "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
-        )
+        {Igniter.add_notice(
+           igniter,
+           "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+         ), true}
 
       :not_found ->
         # `select_router/1` can name a router that `find_module/2` cannot locate,
         # for example one defined through an alias. `Phoenix.has_pipeline/3`
         # would raise on that module, so warn instead of crashing the installer.
-        Igniter.add_warning(
-          igniter,
-          "Could not find the Phoenix router #{inspect(router)} to mount Amur.Router."
-        )
+        {Igniter.add_warning(
+           igniter,
+           "Could not find the Phoenix router #{inspect(router)} to mount Amur.Router."
+         ), false}
 
       false ->
         {igniter, has_browser_pipeline?} =
@@ -286,13 +294,13 @@ defmodule Mix.Tasks.Amur.Install do
             "forward \"/\", Amur.Router"
           end
 
-        Phoenix.add_scope(
-          igniter,
-          "/auth",
-          contents,
-          router: router,
-          arg2: [alias: false]
-        )
+        {Phoenix.add_scope(
+           igniter,
+           "/auth",
+           contents,
+           router: router,
+           arg2: [alias: false]
+         ), true}
     end
   end
 
@@ -667,7 +675,7 @@ defmodule Mix.Tasks.Amur.Install do
     end)
   end
 
-  defp queue_next_steps(igniter, web_module, providers, opts) do
+  defp queue_next_steps(igniter, web_module, providers, opts, router_mounted?) do
     provider_example = List.first(providers, :github)
 
     next_steps =
@@ -690,10 +698,15 @@ defmodule Mix.Tasks.Amur.Install do
           end
 
         flow_step =
-          if opts[:page] do
-            "      3. Open the sign-in page at:\n         /auth"
-          else
-            "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
+          cond do
+            not router_mounted? ->
+              "      3. Mount Amur.Router in your router before starting a flow."
+
+            opts[:page] ->
+              "      3. Open the sign-in page at:\n         /auth"
+
+            true ->
+              "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
           end
 
         """

@@ -899,7 +899,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
     # `select_router/1` resolves the router through an alias, so it can name a
     # module that `find_module/2` cannot find. The installer must warn rather
     # than crash while trying to read the router's pipelines.
-    {:ok, _igniter, %{warnings: warnings}} =
+    {:ok, _igniter, %{warnings: warnings, notices: notices}} =
       apply_install_with_messages(
         ["--app", "sample", "--yes"],
         %{
@@ -929,6 +929,11 @@ defmodule Mix.Tasks.Amur.InstallTest do
                "Could not find the Phoenix router SampleWeb.Router to mount Amur.Router."
              )
            )
+
+    # The next steps must not point the user at a route that was never mounted.
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
   end
 
   test "ignores an alias whose target is not a module alias" do
