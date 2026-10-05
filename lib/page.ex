@@ -12,6 +12,11 @@ defmodule Amur.Page do
   its assets are read from Amur's own `priv/` directory, so no files need to be
   copied into the host application.
 
+  The response is a complete HTML document (doctype, `<html lang="en">`, `<head>`
+  with a title and meta description), so it is valid on its own and passes the
+  document-level checks that Lighthouse and search engines apply. The page is
+  English-only; the `lang` attribute reflects that.
+
   The template is compiled into `render_page/6` when Amur is compiled, and the
   template file is registered as an external resource, so editing it rebuilds
   the page on the next compile.
@@ -81,9 +86,9 @@ defmodule Amur.Page do
   @doc """
   Renders the sign-in page for the configured providers.
 
-  Responds with `200` and an HTML body. When no provider is configured the
-  response is a `404` explaining that Amur has no providers to sign in with,
-  which is more useful than an empty page.
+  Responds with `200` and a complete HTML document. When no provider is
+  configured the response is a `404` explaining that Amur has no providers to
+  sign in with, which is more useful than an empty page.
 
   Asset and provider links are built from the mount point recorded in
   `conn.script_name`, so the page works wherever `Amur.Router` is mounted

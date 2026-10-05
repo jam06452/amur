@@ -336,6 +336,43 @@ defmodule Amur.PageTest do
     assert body =~ "Sign in to &lt;/h1&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
   end
 
+  test "renders a complete HTML document with a doctype and language" do
+    Application.put_env(:amur, :app_name, "Acme")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    assert String.starts_with?(String.trim_leading(body), "<!DOCTYPE html>")
+    assert body =~ ~s|<html lang="en">|
+    assert body =~ "<head>"
+    assert body =~ "</head>"
+    assert body =~ "<body>"
+    assert body =~ "</body>"
+    assert body =~ "</html>"
+  end
+
+  test "sets a document title and meta description" do
+    Application.put_env(:amur, :app_name, "Acme")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    assert body =~ "<title>Sign in to Acme</title>"
+    assert body =~ ~s|<meta name="description" content="Sign in to Acme|
+    assert body =~ ~s|<meta charset="utf-8"|
+    assert body =~ ~s|name="viewport"|
+  end
+
+  test "escapes the app name in the title and meta description" do
+    Application.put_env(:amur, :app_name, "</title><script>alert(1)</script>")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    refute body =~ "<script>"
+    assert body =~ "&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+  end
+
   test "responds with 404 when no providers are configured" do
     Application.put_env(:amur, :providers, [])
 
