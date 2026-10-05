@@ -707,6 +707,12 @@ defmodule Mix.Tasks.Amur.Install do
             router_status == :not_mounted ->
               "      3. Mount Amur.Router in your router before starting a flow."
 
+            router_status == :skipped ->
+              # `--no-router` means the installer did not mount Amur.Router, so it
+              # must not point at a route that may not exist. The user opted out
+              # of the mount, so the step is theirs to complete.
+              "      3. Mount Amur.Router in your router, then start a flow at:\n         /auth/#{provider_example}"
+
             opts[:page] ->
               "      3. Open the sign-in page at:\n         /auth"
 
