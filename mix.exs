@@ -46,6 +46,7 @@ defmodule Amur.MixProject do
       # Introduction
       "guides/overview.md",
       "guides/introduction/installation.md",
+      "guides/introduction/comparisons.md",
 
       # Learning
       "guides/learning/providers.md",
