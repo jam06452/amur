@@ -1,6 +1,17 @@
 defmodule Amur.Providers.Google do
   @moduledoc """
   Google OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Google` (OpenID Connect).
+
+  ## Configuration
+
+  Default scope: `email profile`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, `name` to `:name`, and `picture`
+  to `:avatar`.
   """
 
   use Amur.Provider

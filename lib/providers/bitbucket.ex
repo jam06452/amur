@@ -1,6 +1,22 @@
 defmodule Amur.Providers.Bitbucket do
   @moduledoc """
   Bitbucket OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Bitbucket`. Authorization and token requests go to
+  `https://bitbucket.org/site/oauth2/*`, while the user is fetched from the
+  `https://api.bitbucket.org/2.0` API.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `account email`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, `name` to `:name`, and `picture`
+  to `:avatar`.
   """
 
   use Amur.Provider

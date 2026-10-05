@@ -1,6 +1,21 @@
 defmodule Amur.Providers.Facebook do
   @moduledoc """
   Facebook OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Facebook` and talks to the Graph API at
+  `https://graph.facebook.com/v4.0`, fetching the user from `/me`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `email`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, `name` to `:name`, and `picture`
+  to `:avatar`.
   """
 
   use Amur.Provider

@@ -1,6 +1,21 @@
 defmodule Amur.Providers.Basecamp do
   @moduledoc """
   Basecamp OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Basecamp` and talks to the 37signals Launchpad at
+  `https://launchpad.37signals.com`.
+
+  ## Configuration
+
+  Uses the `web_server` authorization type and sends the client secret in the
+  request body (`auth_method: :client_secret_post`).
+
+  Sets no default scope; Basecamp relies on its own defaults.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, and `name` to `:name`. No avatar
+  is returned.
   """
 
   use Amur.Provider

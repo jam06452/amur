@@ -1,6 +1,21 @@
 defmodule Amur.Providers.Discord do
   @moduledoc """
   Discord OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Discord` and talks to `https://discordapp.com/api`,
+  fetching the current user from `/users/@me`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `identify email`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, `preferred_username` to `:name`,
+  and `picture` to `:avatar`.
   """
 
   use Amur.Provider

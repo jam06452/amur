@@ -1,6 +1,22 @@
 defmodule Amur.Providers.Instagram do
   @moduledoc """
   Instagram OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Instagram`. Authorization goes to
+  `https://api.instagram.com/oauth/*`, while the profile is fetched from the
+  Instagram Graph API at `https://graph.instagram.com`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `user_profile`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid` and falls back from `preferred_username` to `name` for
+  `:name`. Instagram returns no email or avatar, so those keys are omitted.
   """
 
   use Amur.Provider

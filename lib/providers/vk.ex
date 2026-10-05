@@ -1,6 +1,22 @@
 defmodule Amur.Providers.VK do
   @moduledoc """
   VK OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.VK`. Authorization goes to
+  `https://oauth.vk.com/*`, while the user is fetched from the API method
+  `https://api.vk.com/method/users.get`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `email`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, and `picture` to `:avatar`. The
+  name is built by joining `given_name` and `family_name` with a space.
   """
 
   use Amur.Provider

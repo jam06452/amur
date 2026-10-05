@@ -1,6 +1,22 @@
 defmodule Amur.Providers.Stripe do
   @moduledoc """
   Stripe OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Stripe` (Stripe Connect). Authorization and token
+  requests go to `https://connect.stripe.com/oauth/*`, while the account is
+  fetched from `https://api.stripe.com/v1/account`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Sets no default scope; Stripe relies on its own defaults.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid` and `email` to `:email`. Stripe returns no name or
+  avatar, so those keys are omitted.
   """
 
   use Amur.Provider

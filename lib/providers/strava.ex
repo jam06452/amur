@@ -1,6 +1,23 @@
 defmodule Amur.Providers.Strava do
   @moduledoc """
   Strava OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Strava`. Authorization goes to
+  `https://www.strava.com/oauth/authorize`, while the athlete is fetched from
+  the API at `https://www.strava.com/api/v3/athlete`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `read_all,profile:read_all`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid` and `picture` to `:avatar`. For `:name` it prefers
+  `preferred_username`, falling back to `given_name` and `family_name` joined
+  with a space. Strava returns no email, so that key is omitted.
   """
 
   use Amur.Provider
