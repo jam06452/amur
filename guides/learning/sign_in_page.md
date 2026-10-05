@@ -34,6 +34,9 @@ mix igniter.install amur --provider github,google,discord --page
 
 ## Behaviour
 
+- The page is a complete HTML document: it carries a doctype, an `<html lang>`
+  attribute, and a `<head>` with a title and meta description, so it is valid on
+  its own and passes document-level accessibility and SEO checks.
 - The page lists every provider configured under `:amur, :providers`, in the
   order they are declared.
 - Each provider is rendered as a button linking to `/auth/:provider`.
@@ -60,6 +63,12 @@ config :amur,
 ```
 
 When unset, the heading reads "Sign in to your account".
+
+## Language
+
+The page is English-only, and the document's `<html lang>` attribute is set to
+`"en"` to match. There is no translation layer: the heading, divider, and
+button labels are fixed English strings.
 
 ## Logo
 

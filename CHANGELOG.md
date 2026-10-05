@@ -40,6 +40,15 @@ responds with `404` rather than rendering an empty list.
 Asset and provider links are built from the mount point recorded in `conn.script_name`, so the page
 works wherever `Amur.Router` is mounted rather than assuming `/auth`.
 
+The page is served as a complete HTML document — doctype, `<html lang="en">`, and a `<head>` with a
+title and meta description — so it is valid on its own and passes the document-level accessibility
+and SEO checks that Lighthouse applies. The page is English-only, and the `lang` attribute reflects
+that.
+
+The response also carries a restrictive `Content-Security-Policy` (`default-src 'none'`, no scripts,
+no framing) plus `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`, so the page is
+hardened even when the host application sets no security headers of its own.
+
 ## Provider Icons
 
 Every built-in provider now has a bundled SVG icon, inlined with `fill="currentColor"` so it follows
