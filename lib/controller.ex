@@ -135,10 +135,13 @@ defmodule Amur.Controller do
   # Builds the `:stop` metadata. `strategy` is included only when the provider
   # resolved far enough to know it, so a handler can rely on the key being
   # present whenever the failure came from the strategy rather than from
-  # resolving the provider itself.
+  # resolving the provider itself. The check is `is_nil/1` rather than
+  # truthiness: a strategy is a module atom, and relying on truthiness is the
+  # same trap that made a provider named `false` unlabelled in
+  # `resolve_provider/1`.
   defp stop_metadata(reason, strategy) do
     metadata = %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}
-    if strategy, do: Map.put(metadata, :strategy, strategy), else: metadata
+    if is_nil(strategy), do: metadata, else: Map.put(metadata, :strategy, strategy)
   end
 
   # Resolves the provider name for telemetry metadata without touching the atom
