@@ -30,14 +30,46 @@ defmodule Amur.Controller do
   connection returned by the configured failure callback.
   """
   def request(conn, %{"provider" => provider}) do
-    with {:ok, {_module, config}} <- Amur.Config.resolve(provider),
-         strategy = Keyword.fetch!(config, :strategy),
-         {:ok, %{url: url, session_params: session_params}} <- strategy.authorize_url(config) do
-      conn
-      |> put_session(:amur_session_params, session_params)
-      |> redirect(url)
-    else
-      {:error, reason} -> handle_failure(conn, reason)
+    result =
+      Amur.Telemetry.span([:amur, :request], %{provider: resolve_provider(provider)}, fn ->
+        case do_request(conn, provider) do
+          {:ok, conn, strategy} ->
+            {{:ok, conn}, %{result: :ok, strategy: strategy}}
+
+          {:error, reason, strategy} ->
+            {{:error, reason}, stop_metadata(reason, strategy)}
+        end
+      end)
+
+    case result do
+      {:ok, conn} ->
+        conn
+
+      {:error, reason} ->
+        handle_failure(conn, reason)
+    end
+  end
+
+  defp do_request(conn, provider) do
+    case Amur.Config.resolve(provider) do
+      {:ok, {_module, config}} ->
+        strategy = Keyword.fetch!(config, :strategy)
+
+        case strategy.authorize_url(config) do
+          {:ok, %{url: url, session_params: session_params}} ->
+            conn =
+              conn
+              |> put_session(:amur_session_params, session_params)
+              |> redirect(url)
+
+            {:ok, conn, strategy}
+
+          {:error, reason} ->
+            {:error, reason, strategy}
+        end
+
+      {:error, reason} ->
+        {:error, reason, nil}
     end
   end
 
@@ -56,22 +88,99 @@ defmodule Amur.Controller do
     session_params = get_session(conn, :amur_session_params)
     conn = delete_session(conn, :amur_session_params)
 
-    with {:ok, {module, config}} <- Amur.Config.resolve(provider),
-         strategy = Keyword.fetch!(config, :strategy),
-         config = Keyword.put(config, :session_params, session_params),
-         :ok <- validate_session_params(session_params),
-         {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
-      normalized =
-        user
-        |> module.normalize_user()
-        |> Map.put(:provider, provider)
+    result =
+      Amur.Telemetry.span([:amur, :callback], %{provider: resolve_provider(provider)}, fn ->
+        case do_callback(conn, provider, session_params, params) do
+          {:ok, %{user: user, token: token}, strategy} ->
+            {{:ok, user, token}, %{result: :ok, strategy: strategy}}
 
-      on_success = Application.fetch_env!(:amur, :on_success)
-      on_success.(conn, %{user: normalized, token: token})
-    else
-      {:error, reason} -> handle_failure(conn, reason)
+          {:error, reason, strategy} ->
+            {{:error, reason}, stop_metadata(reason, strategy)}
+        end
+      end)
+
+    case result do
+      {:ok, user, token} ->
+        on_success = Application.fetch_env!(:amur, :on_success)
+        on_success.(conn, %{user: user, token: token})
+
+      {:error, reason} ->
+        handle_failure(conn, reason)
     end
   end
+
+  defp do_callback(_conn, provider, session_params, params) do
+    case Amur.Config.resolve(provider) do
+      {:ok, {module, config}} ->
+        strategy = Keyword.fetch!(config, :strategy)
+        config = Keyword.put(config, :session_params, session_params)
+
+        with :ok <- validate_session_params(session_params),
+             {:ok, %{user: user, token: token}} <- strategy.callback(config, params) do
+          normalized =
+            user
+            |> module.normalize_user()
+            |> Map.put(:provider, provider)
+
+          {:ok, %{user: normalized, token: token}, strategy}
+        else
+          {:error, reason} -> {:error, reason, strategy}
+        end
+
+      {:error, reason} ->
+        {:error, reason, nil}
+    end
+  end
+
+  # Builds the `:stop` metadata. `strategy` is included only when the provider
+  # resolved far enough to know it, so a handler can rely on the key being
+  # present whenever the failure came from the strategy rather than from
+  # resolving the provider itself. The check is `is_nil/1` rather than
+  # truthiness: a strategy is a module atom, and relying on truthiness is the
+  # same trap that made a provider named `false` unlabelled in
+  # `resolve_provider/1`.
+  defp stop_metadata(reason, strategy) do
+    metadata = %{result: :error, reason: Amur.Telemetry.sanitize_reason(reason)}
+    if is_nil(strategy), do: metadata, else: Map.put(metadata, :strategy, strategy)
+  end
+
+  # Resolves the provider name for telemetry metadata without touching the atom
+  # table. The request parameter is matched against the configured provider keys
+  # rather than converted with `String.to_existing_atom/1`, so a path like
+  # `/auth/ok` cannot label a metric with an unrelated existing atom. A name that
+  # is configured but does not resolve (for example a provider whose value is not
+  # a module or credentials) reports `nil`, so the label always agrees with the
+  # outcome of `Amur.Config.resolve/1` and metric labels stay bounded.
+  #
+  # The parameter may be a binary (the router passes the URL segment) or an atom
+  # (`Amur.Config.resolve/1` accepts both), so both are normalized before the
+  # comparison; otherwise an atom parameter would resolve successfully but be
+  # labelled `nil`.
+  #
+  # This runs before the span opens, so it must not call provider code:
+  # `Amur.Config.resolvable?/1` answers the same question as `resolve/1` from the
+  # shape of the configured value alone. The actual resolution happens inside the
+  # span body, so a provider whose `base_config/0` raises is reported as an
+  # `:exception` event rather than crashing the request with no telemetry.
+  defp resolve_provider(provider) when is_binary(provider) or is_atom(provider) do
+    configured = Application.get_env(:amur, :providers, [])
+    wanted = to_string(provider)
+
+    # `Enum.find_value/3` would treat a provider named `false` (or `nil`) as "not
+    # found", because it stops on any falsy return. `Enum.find/2` compares the
+    # match explicitly, so the label agrees with `Amur.Config.resolve/1` for
+    # every configured name.
+    case Enum.find(configured, fn {name, _value} ->
+           to_string(name) == wanted and Amur.Config.resolvable?(name)
+         end) do
+      {name, _value} -> name
+      nil -> nil
+    end
+  end
+
+  # A malformed parameter (for example `?provider[]=x`, which Plug parses as a
+  # list) is not a provider name, so it cannot label a metric.
+  defp resolve_provider(_provider), do: nil
 
   # Delegate failure handling to application code when a custom callback is
   # configured; otherwise use the default redirect handler.

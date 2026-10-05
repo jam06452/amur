@@ -56,7 +56,29 @@ defmodule Amur.Config do
     :amur
     |> Application.get_env(:providers, [])
     |> Keyword.keys()
-    |> Enum.filter(&match?({:ok, _}, resolve(&1)))
+    |> Enum.filter(&resolvable?/1)
+  end
+
+  # Reports whether a provider name is configured and maps to a usable module,
+  # without building its configuration.
+  #
+  # `resolve/1` calls `module.base_config/0`, which is provider code and may be
+  # expensive or raise. This predicate answers the same question as `resolve/1`
+  # for a *configured* name - is there a module to dispatch to - using only the
+  # shape of the configured value, so it is safe to call before a span opens to
+  # label telemetry. A provider whose `base_config/0` raises is still resolvable:
+  # the name is valid and the failure belongs to the provider, not the lookup.
+  #
+  # It shares `provider_module/1` with `resolve/1`, so the two can never disagree
+  # about which names resolve. In particular a `providers: [foo: nil]` entry is
+  # reported as unresolvable here and as `{:error, :unknown_provider}` there,
+  # rather than being labelled as a provider and then crashing on
+  # `nil.base_config/0`.
+  #
+  # Public only because `Amur.Controller` calls it; not part of the documented
+  # API (the module is `@moduledoc false`).
+  def resolvable?(provider) do
+    match?({:ok, _module}, provider_module(provider))
   end
 
   # Resolves a provider name supplied by a router or application.
@@ -66,29 +88,59 @@ defmodule Amur.Config do
   # against configured custom modules and built-in providers. Unknown names
   # return `{:error, :unknown_provider}`.
   def resolve(provider) when is_binary(provider) do
-    provider
-    |> String.to_existing_atom()
-    |> resolve()
-  rescue
-    ArgumentError -> {:error, :unknown_provider}
+    # Only the atom conversion is guarded: `String.to_existing_atom/1` raises
+    # `ArgumentError` for a name that is not already an atom, which is the
+    # unknown-provider case. Rescuing the whole pipeline would also swallow an
+    # `ArgumentError` raised by the provider's own `base_config/0`, turning a
+    # provider bug into a misleading `:unknown_provider` and hiding it from
+    # telemetry. The atom clause below is the single source of truth for
+    # resolution, so a provider behaves the same whether it is named by a
+    # binary or an atom.
+    case to_existing_atom(provider) do
+      {:ok, atom} -> resolve(atom)
+      :error -> {:error, :unknown_provider}
+    end
   end
 
   def resolve(provider) when is_atom(provider) do
-    configured_providers = Application.get_env(:amur, :providers, [])
+    case provider_module(provider) do
+      {:ok, module} -> build_config(module, provider)
+      :error -> {:error, :unknown_provider}
+    end
+  end
 
-    case Keyword.fetch(configured_providers, provider) do
-      {:ok, module} when is_atom(module) ->
-        build_config(module, provider)
+  # A malformed request parameter (for example `?provider[]=x`, which Plug parses
+  # as a list) is not a provider name, so it fails cleanly rather than raising a
+  # `FunctionClauseError` from the guards above.
+  def resolve(_provider), do: {:error, :unknown_provider}
+
+  # The single source of truth for "which module serves this provider name".
+  #
+  # A configured value that is a module wins, so a custom provider overrides a
+  # built-in of the same name. Any other configured value (credentials, or a
+  # malformed one) falls back to the built-in of that name. `nil` is an atom but
+  # not a module, so it is rejected explicitly: otherwise `resolve/1` would call
+  # `nil.base_config/0` and crash, and `resolvable?/1` would claim the name is
+  # usable. Both callers share this function, so they cannot drift apart.
+  defp provider_module(provider) when is_atom(provider) and not is_nil(provider) do
+    case Keyword.fetch(Application.get_env(:amur, :providers, []), provider) do
+      {:ok, module} when is_atom(module) and not is_nil(module) ->
+        {:ok, module}
 
       {:ok, _credentials} ->
-        case Map.fetch(@built_ins, provider) do
-          {:ok, module} -> build_config(module, provider)
-          :error -> {:error, :unknown_provider}
-        end
+        Map.fetch(@built_ins, provider)
 
       :error ->
-        {:error, :unknown_provider}
+        :error
     end
+  end
+
+  defp provider_module(_provider), do: :error
+
+  defp to_existing_atom(provider) do
+    {:ok, String.to_existing_atom(provider)}
+  rescue
+    ArgumentError -> :error
   end
 
   defp build_config(module, provider) do

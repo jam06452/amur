@@ -129,4 +129,41 @@ defmodule Amur.ConfigTest do
 
     assert Amur.Config.configured_providers() == []
   end
+
+  test "resolve/1 and resolvable?/1 agree for a nil module value" do
+    # `nil` is an atom but not a module. `resolve/1` must not call
+    # `nil.base_config/0`, and `resolvable?/1` must not claim the name is usable:
+    # the two share `provider_module/1` so they cannot disagree.
+    Application.put_env(:amur, :providers, foo: nil)
+
+    assert Amur.Config.resolvable?(:foo) == false
+    assert {:error, :unknown_provider} = Amur.Config.resolve(:foo)
+    assert {:error, :unknown_provider} = Amur.Config.resolve("foo")
+  end
+
+  test "configured_providers/0 does not crash on a nil module value" do
+    # A `providers: [github: nil]` entry is treated like `github: []`: the name
+    # falls back to the built-in, so it resolves and is listed. A non-built-in
+    # name with a nil value resolves to nothing and is omitted.
+    Application.put_env(:amur, :providers, github: nil, foo: nil)
+
+    assert Amur.Config.configured_providers() == [:github]
+  end
+
+  test "resolvable?/1 agrees with resolve/1 for every configured shape" do
+    Application.put_env(:amur, :providers,
+      github: [client_id: "id"],
+      custom: Amur.ConfigTest.CustomProvider,
+      weird: "not-a-module",
+      foo: nil
+    )
+
+    for name <- [:github, :custom, :weird, :foo, :nope] do
+      resolvable? = Amur.Config.resolvable?(name)
+      resolves? = match?({:ok, _}, Amur.Config.resolve(name))
+
+      assert resolvable? == resolves?,
+             "resolvable?(#{inspect(name)}) = #{resolvable?} but resolve/1 resolved? = #{resolves?}"
+    end
+  end
 end

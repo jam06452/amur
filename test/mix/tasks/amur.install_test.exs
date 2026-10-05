@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Amur.InstallTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   defp apply_install(args, files \\ %{}) do
     {:ok, igniter, _messages} = apply_install_with_messages(args, files)
@@ -157,6 +157,18 @@ defmodule Mix.Tasks.Amur.InstallTest do
     refute igniter.assigns[:test_files]["lib/sample_web/router.ex"] =~ "forward"
   end
 
+  test "does not point at an unmounted route when --no-router is passed" do
+    # `--no-router` means the user opted out of mounting, so the installer knows
+    # Amur.Router is not mounted and must not point at `/auth` as if it were.
+    # The step tells the user to mount it first, then gives the URL.
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(["--app", "sample", "--no-router", "--yes"], %{})
+
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+  end
+
   test "leaves an existing auth controller unchanged" do
     existing = """
     defmodule SampleWeb.AuthController do
@@ -227,6 +239,27 @@ defmodule Mix.Tasks.Amur.InstallTest do
              warnings,
              &String.contains?(&1, "Could not find a Plug.Router module to patch.")
            )
+  end
+
+  test "does not point at an unmounted route when no Plug router can be found" do
+    # With config generation enabled the next steps reach the flow step. Since no
+    # Plug.Router was patched, the user must be told to mount Amur.Router rather
+    # than pointed at a route that was never mounted. The controller is supplied
+    # so config generation is permitted without `--no-controller`.
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
+          "lib/sample.ex" => "defmodule Sample do\nend\n",
+          "lib/sample_web/controllers/auth_controller.ex" =>
+            "defmodule SampleWeb.AuthController do\nend\n"
+        }
+      )
+
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
   end
 
   test "requires an existing controller when configuration is requested without generation" do
@@ -893,6 +926,47 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     router = igniter.assigns[:test_files]["lib/sample/router.ex"]
     assert router =~ ~s|forward("/auth", to: Amur.Router)|
+  end
+
+  test "warns when the detected Phoenix router cannot be located" do
+    # `select_router/1` resolves the router through an alias, so it can name a
+    # module that `find_module/2` cannot find. The installer must warn rather
+    # than crash while trying to read the router's pipelines.
+    {:ok, _igniter, %{warnings: warnings, notices: notices}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.NotARouter do\nend\n",
+          "lib/weird/thing.ex" => """
+          alias SampleWeb.Router
+
+          defmodule Router do
+            use Phoenix.Router
+
+            pipeline :browser do
+              plug :accepts, ["html"]
+            end
+
+            scope "/", SampleWeb do
+              pipe_through :browser
+            end
+          end
+          """
+        }
+      )
+
+    assert Enum.any?(
+             warnings,
+             &String.contains?(
+               &1,
+               "Could not find the Phoenix router SampleWeb.Router to mount Amur.Router."
+             )
+           )
+
+    # The next steps must not point the user at a route that was never mounted.
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
   end
 
   test "ignores an alias whose target is not a module alias" do

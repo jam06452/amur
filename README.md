@@ -20,6 +20,7 @@ authentication and user data management up to your application.
 - 24 built-in [providers](#built-in-providers)
 - Normalized users, the same data format across providers
 - Custom providers, add providers that aren't built in
+- Telemetry, observe the OAuth flow with `:telemetry`
 - Igniter, get started in under 60 seconds
 - Built on Assent, OAuth strategies are provided by [Assent](https://hex.pm/packages/assent)
 

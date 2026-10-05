@@ -77,12 +77,15 @@ defmodule Mix.Tasks.Amur.Install do
     providers = resolve_providers(opts)
     validate_controller_options!(igniter, opts, web_module)
 
+    {igniter, router_status} =
+      igniter
+      |> maybe_add_controller(opts, web_module, phoenix?)
+      |> maybe_add_router(opts, phoenix?, router)
+
     igniter
-    |> maybe_add_controller(opts, web_module, phoenix?)
-    |> maybe_add_router(opts, phoenix?, router)
     |> maybe_add_config(opts, web_module, providers, phoenix?)
     |> maybe_add_page(opts, app_name)
-    |> queue_next_steps(web_module, providers, opts)
+    |> queue_next_steps(web_module, providers, opts, router_status)
   end
 
   defp detect_phoenix(igniter) do
@@ -247,9 +250,18 @@ defmodule Mix.Tasks.Amur.Install do
     """
   end
 
+  # Returns `{igniter, router_status}` where `router_status` is one of:
+  #
+  #   * `:mounted` - Amur.Router is mounted (already, or by this run)
+  #   * `:not_mounted` - mounting was attempted and failed, so the user must do it
+  #   * `:skipped` - the user passed `--no-router`, so the installer did not look
+  #
+  # The three states are kept distinct so the next steps only tell the user to
+  # mount Amur.Router when mounting actually failed, rather than also when they
+  # explicitly opted out.
   defp maybe_add_router(igniter, opts, phoenix?, router) do
     if opts[:router] == false do
-      igniter
+      {igniter, :skipped}
     else
       add_router(igniter, phoenix?, router)
     end
@@ -257,19 +269,22 @@ defmodule Mix.Tasks.Amur.Install do
 
   defp add_router(igniter, true, router) do
     case phoenix_router_mounted?(igniter, router) do
-      :mounted ->
-        Igniter.add_notice(
-          igniter,
-          "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
-        )
+      true ->
+        {Igniter.add_notice(
+           igniter,
+           "[skip] #{inspect(router)} already forwards to Amur.Router; leaving unchanged."
+         ), :mounted}
 
       :not_found ->
-        Igniter.add_warning(
-          igniter,
-          "Could not find the Phoenix router #{inspect(router)} to patch."
-        )
+        # `select_router/1` can name a router that `find_module/2` cannot locate,
+        # for example one defined through an alias. `Phoenix.has_pipeline/3`
+        # would raise on that module, so warn instead of crashing the installer.
+        {Igniter.add_warning(
+           igniter,
+           "Could not find the Phoenix router #{inspect(router)} to mount Amur.Router."
+         ), :not_mounted}
 
-      :not_mounted ->
+      false ->
         {igniter, has_browser_pipeline?} =
           Phoenix.has_pipeline(igniter, router, :browser)
 
@@ -283,13 +298,13 @@ defmodule Mix.Tasks.Amur.Install do
             "forward \"/\", Amur.Router"
           end
 
-        Phoenix.add_scope(
-          igniter,
-          "/auth",
-          contents,
-          router: router,
-          arg2: [alias: false]
-        )
+        {Phoenix.add_scope(
+           igniter,
+           "/auth",
+           contents,
+           router: router,
+           arg2: [alias: false]
+         ), :mounted}
     end
   end
 
@@ -303,14 +318,15 @@ defmodule Mix.Tasks.Amur.Install do
 
     case modules do
       [module | _] ->
-        ProjectModule.find_and_update_module!(
-          igniter,
-          module,
-          &update_plug_router/1
-        )
+        {ProjectModule.find_and_update_module!(
+           igniter,
+           module,
+           &update_plug_router/1
+         ), :mounted}
 
       [] ->
-        Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch.")
+        {Igniter.add_warning(igniter, "Could not find a Plug.Router module to patch."),
+         :not_mounted}
     end
   end
 
@@ -321,21 +337,18 @@ defmodule Mix.Tasks.Amur.Install do
   # that forwards Amur somewhere else (for example `/oauth`) still needs the
   # documented `/auth` mount, so a whole-file match would wrongly skip it.
   #
-  # Returns `:mounted`, `:not_mounted`, or `:not_found` when the router module
-  # cannot be located, so the caller can warn instead of crashing downstream.
+  # Returns `true` when the `/auth` scope already forwards to Amur.Router, `false`
+  # when it does not, or `:not_found` when the router module cannot be located, so
+  # the caller can warn instead of crashing downstream.
   defp phoenix_router_mounted?(igniter, router) do
     case Igniter.Project.Module.find_module(igniter, router) do
       {:ok, {_igniter, _source, zipper}} ->
-        if zipper
-           |> Zipper.topmost()
-           |> Zipper.node()
-           |> auth_scope_amur_forward?() do
-          :mounted
-        else
-          :not_mounted
-        end
+        zipper
+        |> Zipper.topmost()
+        |> Zipper.node()
+        |> auth_scope_amur_forward?()
 
-      _ ->
+      {:error, _igniter} ->
         :not_found
     end
   end
@@ -671,7 +684,7 @@ defmodule Mix.Tasks.Amur.Install do
     end)
   end
 
-  defp queue_next_steps(igniter, web_module, providers, opts) do
+  defp queue_next_steps(igniter, web_module, providers, opts, router_status) do
     provider_example = List.first(providers, :github)
 
     next_steps =
@@ -694,10 +707,21 @@ defmodule Mix.Tasks.Amur.Install do
           end
 
         flow_step =
-          if opts[:page] do
-            "      3. Open the sign-in page at:\n         /auth"
-          else
-            "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
+          cond do
+            router_status == :not_mounted ->
+              "      3. Mount Amur.Router in your router before starting a flow."
+
+            router_status == :skipped ->
+              # `--no-router` means the installer did not mount Amur.Router, so it
+              # must not point at a route that may not exist. The user opted out
+              # of the mount, so the step is theirs to complete.
+              "      3. Mount Amur.Router in your router, then start a flow at:\n         /auth/#{provider_example}"
+
+            opts[:page] ->
+              "      3. Open the sign-in page at:\n         /auth"
+
+            true ->
+              "      3. Initiate an OAuth flow at:\n         /auth/#{provider_example}"
           end
 
         """
