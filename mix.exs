@@ -54,7 +54,7 @@ defmodule Amur.MixProject do
       "guides/learning/oauth_flow.md",
       "guides/learning/custom_providers.md",
       "guides/learning/sign_in_page.md",
-      "guides/learning/telemetry.md"
+      "guides/learning/telemetry.md",
 
       # Reference
       "CHANGELOG.md"
