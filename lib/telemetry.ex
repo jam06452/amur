@@ -29,7 +29,8 @@ defmodule Amur.Telemetry do
   #
   # `fun` must return `{result, stop_metadata}`, matching `:telemetry.span/3`.
   # `start_metadata` is emitted with the `:start` event; `stop_metadata` is merged
-  # with the base metadata for the `:stop` and `:exception` events.
+  # with it for the `:stop` event. The `:exception` event carries `start_metadata`
+  # only, because `fun` raises before it can return any stop metadata.
   #
   # Exceptions raised by `fun` are re-raised unchanged, but with their stacktrace
   # scrubbed of function arguments, so a crash cannot leak provider configuration
@@ -96,6 +97,19 @@ defmodule Amur.Telemetry do
   # carries the OAuth error code in `:error` on a `CallbackError`.
   def sanitize_reason(%{__struct__: Assent.CallbackError, error: "access_denied"}),
     do: :access_denied
+
+  # OAuth 1.0 (Twitter) reports a cancellation as a `CallbackError` with no
+  # `:error` code, only this message, so the code alone would misclassify it as a
+  # generic provider error. The message is Assent's, so this clause is coupled to
+  # Assent's wording; the test derives the message from Assent rather than
+  # hardcoding it, so a reword fails the suite instead of silently degrading to
+  # `:provider_error`. Matching `error: nil` instead would be too broad: Telegram
+  # also raises `CallbackError` without an `:error` code for unrelated failures.
+  def sanitize_reason(%{
+        __struct__: Assent.CallbackError,
+        message: "The user denied the authorization request"
+      }),
+      do: :access_denied
 
   def sanitize_reason(%{__struct__: Assent.CallbackError}), do: :provider_error
 

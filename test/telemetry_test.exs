@@ -2,6 +2,7 @@ defmodule Amur.TelemetryTest do
   use ExUnit.Case, async: false
 
   alias Amur.Telemetry
+  alias Assent.Strategy.Twitter
 
   @handler_id "amur-telemetry-test"
 
@@ -429,6 +430,14 @@ defmodule Amur.TelemetryTest do
       assert Telemetry.sanitize_reason(
                Assent.CallbackError.exception(message: "denied", error: "access_denied")
              ) == :access_denied
+
+      # OAuth 1.0 (Twitter) reports a cancellation with no `:error` code, only a
+      # message. The message is taken from Assent itself rather than hardcoded, so
+      # a reworded message in a future Assent release fails this test loudly
+      # instead of silently degrading the categorization to `:provider_error`.
+      {:error, twitter_denial} = Twitter.callback([], %{"denied" => "x"})
+
+      assert Telemetry.sanitize_reason(twitter_denial) == :access_denied
 
       assert Telemetry.sanitize_reason(Assent.CallbackError.exception(message: "other")) ==
                :provider_error
