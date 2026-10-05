@@ -336,6 +336,10 @@ defmodule Mix.Tasks.Amur.Install do
   # Only a `forward "/", Amur.Router` inside the `/auth` scope counts: a project
   # that forwards Amur somewhere else (for example `/oauth`) still needs the
   # documented `/auth` mount, so a whole-file match would wrongly skip it.
+  #
+  # Returns `true` when the `/auth` scope already forwards to Amur.Router, `false`
+  # when it does not, or `:not_found` when the router module cannot be located, so
+  # the caller can warn instead of crashing downstream.
   defp phoenix_router_mounted?(igniter, router) do
     case Igniter.Project.Module.find_module(igniter, router) do
       {:ok, {_igniter, _source, zipper}} ->

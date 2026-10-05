@@ -221,6 +221,86 @@ defmodule Amur.PageTest do
     assert body =~ ~s|href="/api/v1/auth/github"|
   end
 
+  test "substitutes the mount point into the cached body on every request" do
+    Application.put_env(:amur, :providers, github: [])
+
+    # The body is rendered once and cached, but the mount point is substituted
+    # per request, so the same cached body serves different mount points.
+    assert render_page(["auth"]).resp_body =~ ~s|href="/auth/github"|
+    assert render_page(["login"]).resp_body =~ ~s|href="/login/github"|
+    assert render_page([]).resp_body =~ ~s|href="/github"|
+  end
+
+  test "leaves no placeholder in the rendered body" do
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    refute body =~ "amur-base"
+    refute body =~ <<0>>
+  end
+
+  test "reuses the cached body when the configuration is unchanged" do
+    Application.put_env(:amur, :providers, github: [])
+
+    first = render_page().resp_body
+    second = render_page().resp_body
+
+    assert first == second
+  end
+
+  test "re-renders when the configured providers change" do
+    Application.put_env(:amur, :providers, github: [])
+    assert render_page().resp_body =~ "Continue with GitHub"
+
+    Application.put_env(:amur, :providers, google: [])
+    body = render_page().resp_body
+
+    assert body =~ "Continue with Google"
+    refute body =~ "Continue with GitHub"
+  end
+
+  test "re-renders when the application name changes" do
+    Application.put_env(:amur, :providers, github: [])
+    Application.put_env(:amur, :app_name, "Acme")
+    assert render_page().resp_body =~ "Sign in to Acme"
+
+    Application.put_env(:amur, :app_name, "Globex")
+    body = render_page().resp_body
+
+    assert body =~ "Sign in to Globex"
+    refute body =~ "Sign in to Acme"
+  end
+
+  test "re-renders when the page logo changes" do
+    Application.put_env(:amur, :providers, github: [])
+    Application.put_env(:amur, :logo, {:svg, ~s|<svg><circle r="1"/></svg>|})
+    assert render_page().resp_body =~ ~s|<circle r="1"/>|
+
+    Application.put_env(:amur, :logo, {:svg, ~s|<svg><rect width="2"/></svg>|})
+    body = render_page().resp_body
+
+    assert body =~ ~s|<rect width="2"/>|
+    refute body =~ ~s|<circle r="1"/>|
+  end
+
+  # Two configurations can name the same provider but resolve it to different
+  # modules, and the module determines the icon. The cache key must include the
+  # resolved module, not just the provider name, or the second configuration
+  # would reuse the first configuration's icon.
+  test "distinguishes providers that share a name but resolve to different modules" do
+    Application.delete_env(:amur, :logo)
+
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.LogoProvider)
+    assert render_page().resp_body =~ ~s|<circle cx="12" cy="12" r="10"/>|
+
+    Application.put_env(:amur, :providers, custom: Amur.PageTest.PathLogoProvider)
+    body = render_page().resp_body
+
+    assert body =~ ~s|<img src="/images/custom.svg" alt="" />|
+    refute body =~ ~s|<circle cx="12" cy="12" r="10"/>|
+  end
+
   test "uses the list layout for two or fewer providers" do
     Application.put_env(:amur, :providers, github: [], google: [])
 
@@ -254,6 +334,58 @@ defmodule Amur.PageTest do
 
     refute body =~ "<script>"
     assert body =~ "Sign in to &lt;/h1&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+  end
+
+  test "renders a complete HTML document with a doctype and language" do
+    Application.put_env(:amur, :app_name, "Acme")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    assert String.starts_with?(String.trim_leading(body), "<!DOCTYPE html>")
+    assert body =~ ~s|<html lang="en">|
+    assert body =~ "<head>"
+    assert body =~ "</head>"
+    assert body =~ "<body>"
+    assert body =~ "</body>"
+    assert body =~ "</html>"
+  end
+
+  test "sets a document title and meta description" do
+    Application.put_env(:amur, :app_name, "Acme")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    assert body =~ "<title>Sign in to Acme</title>"
+    assert body =~ ~s|<meta name="description" content="Sign in to Acme|
+    assert body =~ ~s|<meta charset="utf-8"|
+    assert body =~ ~s|name="viewport"|
+  end
+
+  test "escapes the app name in the title and meta description" do
+    Application.put_env(:amur, :app_name, "</title><script>alert(1)</script>")
+    Application.put_env(:amur, :providers, github: [])
+
+    body = render_page().resp_body
+
+    refute body =~ "<script>"
+    assert body =~ "&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+  end
+
+  test "sets a restrictive content security policy and hardening headers" do
+    Application.put_env(:amur, :providers, github: [])
+
+    conn = render_page()
+
+    [csp] = Plug.Conn.get_resp_header(conn, "content-security-policy")
+    assert csp =~ "default-src 'none'"
+    assert csp =~ "frame-ancestors 'none'"
+    refute csp =~ "unsafe-inline"
+    refute csp =~ "unsafe-eval"
+
+    assert Plug.Conn.get_resp_header(conn, "x-content-type-options") == ["nosniff"]
+    assert Plug.Conn.get_resp_header(conn, "referrer-policy") == ["no-referrer"]
   end
 
   test "responds with 404 when no providers are configured" do

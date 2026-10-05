@@ -1,6 +1,22 @@
 defmodule Amur.Providers.Spotify do
   @moduledoc """
   Spotify OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Spotify`. Authorization goes to
+  `https://accounts.spotify.com/*`, while the profile is fetched from the Web
+  API at `https://api.spotify.com/v1/me`.
+
+  ## Configuration
+
+  Sends the client secret in the request body
+  (`auth_method: :client_secret_post`).
+
+  Default scope: `user-read-email`.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, and `picture` to `:avatar`. For
+  `:name` it prefers `name`, falling back to `preferred_username`.
   """
 
   use Amur.Provider

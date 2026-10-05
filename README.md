@@ -3,6 +3,7 @@
 
 [![Hex.pm](https://img.shields.io/hexpm/v/amur.svg)](https://hex.pm/packages/amur)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-8e44ad.svg)](https://hexdocs.pm/amur)
+[![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-blue.svg)](CHANGELOG.md)
 
 Amur is an Elixir OAuth client and authentication library for
 [Plug](https://hexdocs.pm/plug) and Phoenix applications.
@@ -279,6 +280,11 @@ end
 The token map's keys depend on the provider's flow: OAuth 2.0 providers use
 `token["access_token"]`, while OAuth 1.0 (Twitter) uses `token["oauth_token"]`
 and `token["oauth_token_secret"]`.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history, or read it on
+[HexDocs](https://hexdocs.pm/amur/changelog.html).
 
 ## License
 

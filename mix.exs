@@ -13,6 +13,7 @@ defmodule Amur.MixProject do
         "OAuth 2.0 and OAuth 1.0 authentication for Elixir Plug and Phoenix applications, with PKCE, state protection, and 24 providers.",
       aliases: aliases(),
       cli: cli(),
+      elixirc_options: [warnings_as_errors: true],
       dialyzer: [plt_add_apps: [:mix]],
       deps: deps(),
       package: package(),
@@ -45,6 +46,7 @@ defmodule Amur.MixProject do
       # Introduction
       "guides/overview.md",
       "guides/introduction/installation.md",
+      "guides/introduction/comparisons.md",
 
       # Learning
       "guides/learning/providers.md",
@@ -53,13 +55,17 @@ defmodule Amur.MixProject do
       "guides/learning/custom_providers.md",
       "guides/learning/sign_in_page.md",
       "guides/learning/telemetry.md"
+
+      # Reference
+      "CHANGELOG.md"
     ]
   end
 
   defp groups_for_extras do
     [
       Introduction: ~r{guides/(overview|introduction/.+)\.md},
-      Learning: ~r{guides/learning/.+}
+      Learning: ~r{guides/learning/.+},
+      Reference: ~r{CHANGELOG\.md}
     ]
   end
 

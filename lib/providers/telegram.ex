@@ -2,8 +2,22 @@ defmodule Amur.Providers.Telegram do
   @moduledoc """
   Telegram OAuth provider for Amur.
 
-  Uses Assent's Telegram strategy, which requires custom configuration:
-  `bot_token`, `origin`, and `return_to` must be provided at runtime.
+  Wraps `Assent.Strategy.Telegram`, which authenticates via the Telegram Login
+  Widget rather than a standard OAuth redirect.
+
+  ## Configuration
+
+  `base_config/0` is empty: Telegram requires `bot_token`, `origin`, and
+  `return_to` to be supplied at runtime, so everything comes from your config.
+
+  Sets no default scope.
+
+  ## Normalized user
+
+  Maps `sub` to `:uid` and `picture` to `:avatar`. For `:name` it joins
+  `given_name` and `family_name` (dropping any blank parts), falling back to
+  `preferred_username` when neither is present. Telegram returns no email, so
+  that key is omitted.
   """
 
   use Amur.Provider

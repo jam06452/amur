@@ -23,7 +23,7 @@ config :amur,
 |---|---|---|
 | `base_url` | no | Base URL used to build the `redirect_uri` (`#{base_url}/auth/:provider/callback`). Defaults to `""`. |
 | `providers` | yes | Keyword list of provider configurations. Each key is a provider name, each value is either a keyword list of credentials or a custom provider module. |
-| `app_name` | no | Name shown in the sign-in page heading. Defaults to `"your account"`. |
+| `app_name` | no | Name shown in the sign-in page heading and title. Defaults to `"your account"`. |
 | `logo` | no | Logo shown above the heading: `{:path, url}`, `{:file, path}`, `{:svg, markup}`, or a bare string. See [Logo](sign_in_page.html#logo). Defaults to the first provider's icon. |
 | `on_success` | yes | A `{module, function, args}` MFA tuple or a function capture of arity 2, called with `(conn, %{user: normalized_user, token: token})`. |
 | `on_failure` | no | Same format as `on_success`, called with `(conn, reason)`. Defaults to a redirect to `/`. |

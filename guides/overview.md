@@ -87,3 +87,5 @@ If anything fails along the way, your `:on_failure` callback is invoked instead.
 - [Custom providers](custom_providers.html) — define a provider that isn't built in.
 - [Sign-in page](sign_in_page.html) — the bundled page, its logo, and its assets.
 - [Telemetry](telemetry.html) — the events emitted by the OAuth flow.
+- [Comparisons](comparisons.html) — how Amur relates to Assent, Überauth, Pow, and
+  Guardian.

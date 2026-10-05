@@ -1,6 +1,22 @@
 defmodule Amur.Providers.Twitch do
   @moduledoc """
   Twitch OAuth provider for Amur.
+
+  Wraps `Assent.Strategy.Twitch` and talks to `https://id.twitch.tv/oauth2`.
+
+  ## Configuration
+
+  Requests the `user:read:email` scope and asks Twitch to include the `email`,
+  `email_verified`, `picture`, and `preferred_username` claims in the ID token
+  via the `claims` authorization parameter.
+
+  Sends the client secret in the request body
+  (`client_authentication_method: "client_secret_post"`).
+
+  ## Normalized user
+
+  Maps `sub` to `:uid`, `email` to `:email`, and `picture` to `:avatar`. For
+  `:name` it prefers `preferred_username`, falling back to `name`.
   """
 
   use Amur.Provider
