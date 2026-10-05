@@ -373,6 +373,21 @@ defmodule Amur.PageTest do
     assert body =~ "&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
   end
 
+  test "sets a restrictive content security policy and hardening headers" do
+    Application.put_env(:amur, :providers, github: [])
+
+    conn = render_page()
+
+    [csp] = Plug.Conn.get_resp_header(conn, "content-security-policy")
+    assert csp =~ "default-src 'none'"
+    assert csp =~ "frame-ancestors 'none'"
+    refute csp =~ "unsafe-inline"
+    refute csp =~ "unsafe-eval"
+
+    assert Plug.Conn.get_resp_header(conn, "x-content-type-options") == ["nosniff"]
+    assert Plug.Conn.get_resp_header(conn, "referrer-policy") == ["no-referrer"]
+  end
+
   test "responds with 404 when no providers are configured" do
     Application.put_env(:amur, :providers, [])
 

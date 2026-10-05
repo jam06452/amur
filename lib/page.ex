@@ -43,6 +43,14 @@ defmodule Amur.Page do
   # rather than silently producing a broken link.
   @base_placeholder "\u0000amur-base\u0000"
 
+  # The page is self-contained: it loads only its own stylesheet and inlines its
+  # icons, so it needs no scripts and no framing. A restrictive policy is
+  # therefore safe by default and protects the page even when the host
+  # application sets no CSP of its own. `style-src` allows the page's own
+  # stylesheet; `img-src` allows a configured logo, which may be same-origin, an
+  # inline data URL, or an absolute HTTPS URL.
+  @csp "default-src 'none'; style-src 'self'; img-src 'self' data: https:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
   require EEx
 
   EEx.function_from_file(:defp, :render_page, @template, [
@@ -108,6 +116,9 @@ defmodule Amur.Page do
 
         conn
         |> put_resp_content_type("text/html")
+        |> put_resp_header("content-security-policy", @csp)
+        |> put_resp_header("x-content-type-options", "nosniff")
+        |> put_resp_header("referrer-policy", "no-referrer")
         |> send_resp(200, body)
     end
   end
