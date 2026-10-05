@@ -375,6 +375,41 @@ defmodule Amur.TelemetryTest do
       assert metadata.provider == :raising_config
       assert %RuntimeError{message: "config boom"} = metadata.reason
     end
+
+    test "an ArgumentError from a provider's base_config is not swallowed" do
+      # `resolve/1` guards the binary-to-atom conversion with a rescue. That
+      # rescue must not span the provider's own `base_config/0`: an
+      # `ArgumentError` raised there is a provider bug, not an unknown provider,
+      # and swallowing it would mislabel the failure and hide it from telemetry.
+      # The router names providers by binary, so the binary path is the one that
+      # matters in production.
+      Application.put_env(:amur, :providers, arg_error: Amur.TelemetryTest.ArgumentErrorProvider)
+
+      assert_raise ArgumentError, fn ->
+        Amur.Controller.request(Plug.Test.conn(:get, "/"), %{"provider" => "arg_error"})
+      end
+
+      assert_receive {:telemetry, [:amur, :request, :exception], _measurements, metadata}
+      assert metadata.provider == :arg_error
+      assert metadata.kind == :error
+      assert metadata.reason == :badarg
+    end
+
+    test "a provider named false is still labelled with its resolved name" do
+      # `Enum.find_value/3` stops on any falsy return, so a provider configured
+      # under the atom `false` would resolve successfully but be labelled `nil`.
+      # The label must agree with `Amur.Config.resolve/1` for every name.
+      Application.put_env(:amur, :providers, [{false, Amur.TelemetryTest.Provider}])
+
+      conn = Amur.Controller.request(start_conn(), %{"provider" => "false"})
+
+      assert conn.status == 302
+
+      assert_receive {:telemetry, [:amur, :request, :start], _measurements, %{provider: false}}
+      assert_receive {:telemetry, [:amur, :request, :stop], _measurements, metadata}
+      assert metadata.provider == false
+      assert metadata.result == :ok
+    end
   end
 
   describe "sanitize_reason/1" do
@@ -497,6 +532,16 @@ defmodule Amur.TelemetryTest do
     use Amur.Provider
     def strategy, do: Amur.TelemetryTest.Strategy
     def base_config, do: raise("config boom")
+    def normalize_user(user), do: user
+  end
+
+  # Raises an `ArgumentError` from `base_config/0`. `Amur.Config.resolve/1`
+  # rescues `ArgumentError` around the binary-to-atom conversion, so this proves
+  # the rescue does not also swallow the provider's own error.
+  defmodule ArgumentErrorProvider do
+    use Amur.Provider
+    def strategy, do: Amur.TelemetryTest.Strategy
+    def base_config, do: String.to_integer("not-a-number")
     def normalize_user(user), do: user
   end
 end

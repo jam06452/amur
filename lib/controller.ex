@@ -163,9 +163,16 @@ defmodule Amur.Controller do
     configured = Application.get_env(:amur, :providers, [])
     wanted = to_string(provider)
 
-    Enum.find_value(configured, nil, fn {name, _value} ->
-      if to_string(name) == wanted and Amur.Config.resolvable?(name), do: name
-    end)
+    # `Enum.find_value/3` would treat a provider named `false` (or `nil`) as "not
+    # found", because it stops on any falsy return. `Enum.find/2` compares the
+    # match explicitly, so the label agrees with `Amur.Config.resolve/1` for
+    # every configured name.
+    case Enum.find(configured, fn {name, _value} ->
+           to_string(name) == wanted and Amur.Config.resolvable?(name)
+         end) do
+      {name, _value} -> name
+      nil -> nil
+    end
   end
 
   # A malformed parameter (for example `?provider[]=x`, which Plug parses as a
