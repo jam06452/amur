@@ -15,14 +15,15 @@ defmodule Amur.Telemetry do
   # `:on_success` and `:on_failure` callbacks run outside the span, so their
   # duration and any exceptions they raise are not attributed to Amur.
   #
-  # Metadata never carries the connection, the session, tokens, credentials, or
-  # the raw user map. The provider is reported as the resolved provider atom, or
-  # `nil` when the request names a provider that is not configured or does not
-  # resolve, so metric labels stay bounded and a request cannot grow the VM atom
-  # table.
+  # Amur's own metadata fields never carry the connection, the session, tokens,
+  # credentials, or the raw user map. Raw exception reasons can contain sensitive
+  # values and must be filtered by handlers. The provider is reported as the
+  # resolved provider atom, or `nil` when the request names a provider that is not
+  # configured or does not resolve, so metric labels stay bounded and a request
+  # cannot grow the VM atom table.
   #
-  # Failure reasons are reduced to a small set of categories before they are
-  # emitted; the raw term is never included. See `sanitize_reason/1`.
+  # Failure reasons on `:stop` are reduced to a small set of categories before
+  # they are emitted; the raw term is never included. See `sanitize_reason/1`.
 
   # Runs `fun` inside a span, emitting the `:start`, `:stop` and `:exception`
   # events for `event_prefix`.
@@ -33,8 +34,8 @@ defmodule Amur.Telemetry do
   # only, because `fun` raises before it can return any stop metadata.
   #
   # Exceptions raised by `fun` are re-raised unchanged, but with their stacktrace
-  # scrubbed of function arguments, so a crash cannot leak provider configuration
-  # through the `:exception` metadata.
+  # scrubbed of function arguments, so provider configuration is not exposed in
+  # stacktrace argument lists in the `:exception` metadata.
   #
   # Public only because `Amur.Controller` calls it; not part of the documented
   # API (the module is `@moduledoc false`).
@@ -43,8 +44,7 @@ defmodule Amur.Telemetry do
       {result, stop_metadata} = guarded(fun)
 
       # `:telemetry.span/3` does not carry the start metadata into the stop
-      # event, so merge it here. The start metadata is emitted as-is, and the
-      # stop and exception events carry the union of both.
+      # event, so merge it here. Exception events already carry start_metadata.
       {result, Map.merge(start_metadata, stop_metadata)}
     end)
   end

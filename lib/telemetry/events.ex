@@ -23,16 +23,17 @@ defmodule Amur.Telemetry.Events do
 
   | Event | Measurements | Metadata |
   |---|---|---|
-  | `[:amur, :request, :start]` | `system_time` | `provider` |
+  | `[:amur, :request, :start]` | `system_time`, `monotonic_time` | `provider` |
   | `[:amur, :request, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, and `reason` on failure |
   | `[:amur, :request, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
-  | `[:amur, :callback, :start]` | `system_time` | `provider` |
+  | `[:amur, :callback, :start]` | `system_time`, `monotonic_time` | `provider` |
   | `[:amur, :callback, :stop]` | `duration`, `monotonic_time` | `provider`, `strategy`, `result`, and `reason` on failure |
   | `[:amur, :callback, :exception]` | `duration`, `monotonic_time` | `provider`, `kind`, `reason`, `stacktrace` |
 
   `duration` is in native time units, as produced by `System.monotonic_time/0`.
-  `:telemetry.span/3` also adds a `telemetry_span_context` to the `:stop` and
-  `:exception` metadata, which lets a handler correlate the events of one span.
+  `:telemetry.span/3` also adds the same `telemetry_span_context` to the `:start`,
+  `:stop`, and `:exception` metadata, which lets a handler correlate the events of
+  one span.
 
   ## Metadata
 
@@ -44,8 +45,9 @@ defmodule Amur.Telemetry.Events do
   | `reason` | A sanitized failure category, present on `:stop` when `result` is `:error`. See below. |
   | `kind`, `reason`, `stacktrace` | The failure details on `:exception`, matching `:telemetry.span/3`. |
 
-  Metadata never includes the connection, the session, the OAuth token, the
-  normalized user, or any provider credentials.
+  Amur's own metadata fields never include the connection, the session, the OAuth
+  token, the normalized user, or any provider credentials. The raw `reason` on an
+  `:exception` event can contain sensitive values; see the note below.
 
   ## Failure reasons
 
@@ -56,7 +58,7 @@ defmodule Amur.Telemetry.Events do
   | Category | Cause |
   |---|---|
   | `:unknown_provider` | The provider name is not configured. |
-  | `:invalid_session_params` | The session had no handshake state, or the state was empty or malformed. |
+  | `:invalid_session_params` | The session's required handshake value (`state` for OAuth 2.0 or the request token secret for OAuth 1.0) was missing, empty, or malformed. |
   | `:state_mismatch` | The provider's `state` did not match the one stored in the session. |
   | `:access_denied` | The provider declined the request, usually because the user cancelled. |
   | `:provider_error` | Any other error returned by the provider or its strategy. |
@@ -71,6 +73,8 @@ defmodule Amur.Telemetry.Events do
   exception.
 
   ## Attaching a handler
+
+      require Logger
 
       :telemetry.attach_many(
         "amur-logger",
@@ -91,7 +95,7 @@ defmodule Amur.Telemetry.Events do
 
   The `:exception` event is intended for error reporting. Amur scrubs function
   arguments from the stacktrace before it is emitted, so provider configuration
-  cannot leak through a crash. The `reason` term, however, is passed through
+  is not exposed in stacktrace argument lists. The `reason` term is passed through
   unchanged so that your error handling sees the failure it would have seen
   without telemetry; it may embed values from the failing call. Do not log
   `:exception` metadata wholesale or forward it to a third party without

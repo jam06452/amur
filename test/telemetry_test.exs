@@ -73,6 +73,8 @@ defmodule Amur.TelemetryTest do
                       %{provider: :fake} = start_metadata}
 
       assert is_integer(start_measurements.system_time)
+      assert is_integer(start_measurements.monotonic_time)
+      assert is_reference(start_metadata.telemetry_span_context)
       refute Map.has_key?(start_metadata, :strategy)
 
       assert_receive {:telemetry, [:amur, :request, :stop], stop_measurements,
@@ -80,6 +82,8 @@ defmodule Amur.TelemetryTest do
 
       assert is_integer(stop_measurements.duration)
       assert is_integer(stop_measurements.monotonic_time)
+      assert stop_measurements.monotonic_time >= start_measurements.monotonic_time
+      assert stop_metadata.telemetry_span_context == start_metadata.telemetry_span_context
       refute Map.has_key?(stop_measurements, :system_time)
       assert stop_metadata.strategy == Amur.TelemetryTest.Strategy
       refute Map.has_key?(stop_metadata, :reason)
@@ -127,6 +131,18 @@ defmodule Amur.TelemetryTest do
   end
 
   describe "callback span" do
+    test "preserves keyword session params for custom strategies" do
+      Application.put_env(:amur, :providers, keyword: Amur.TelemetryTest.KeywordSessionProvider)
+
+      session_params = [state: "expected", marker: :kept]
+
+      Amur.Controller.callback(callback_conn(session_params), %{"provider" => "keyword"})
+
+      assert_receive {:success, %{user: %{uid: "user-1"}}}
+      assert_receive {:telemetry, [:amur, :callback, :stop], _measurements, %{result: :ok}}
+      refute_receive {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
+    end
+
     test "emits start and stop with provider and result on success" do
       Amur.Controller.callback(callback_conn(), %{"provider" => "fake", "code" => "code"})
 
@@ -228,6 +244,32 @@ defmodule Amur.TelemetryTest do
   end
 
   describe "span boundary" do
+    test "the success callback runs outside the callback span" do
+      test_pid = self()
+
+      Application.put_env(:amur, :on_success, fn conn, _context ->
+        send(test_pid, {:on_success_ran_at, System.monotonic_time()})
+        conn
+      end)
+
+      Amur.Controller.callback(callback_conn(), %{"provider" => "fake", "code" => "code"})
+
+      assert_receive {:telemetry, [:amur, :callback, :stop], measurements, %{result: :ok}}
+      assert_receive {:on_success_ran_at, callback_time}
+      assert callback_time >= measurements.monotonic_time
+    end
+
+    test "an exception raised by the success callback is not an Amur exception" do
+      Application.put_env(:amur, :on_success, fn _conn, _context -> raise "on_success boom" end)
+
+      assert_raise RuntimeError, "on_success boom", fn ->
+        Amur.Controller.callback(callback_conn(), %{"provider" => "fake", "code" => "code"})
+      end
+
+      assert_receive {:telemetry, [:amur, :callback, :stop], _measurements, %{result: :ok}}
+      refute_receive {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
+    end
+
     test "the failure callback runs outside the request span" do
       # The `:on_failure` callback is host application code, so its duration must
       # not be attributed to Amur. Assert the ordering structurally rather than
@@ -300,6 +342,67 @@ defmodule Amur.TelemetryTest do
 
       assert log =~ "amur-telemetry-raising-test"
       assert log =~ "handler boom"
+    end
+  end
+
+  describe "guide examples" do
+    import ExUnit.CaptureLog
+
+    test "the logging example handles events without detaching" do
+      on_exit(fn -> :telemetry.detach("amur-logger") end)
+      guide = File.read!(Path.expand("../guides/learning/telemetry.md", __DIR__))
+
+      [_block, example] =
+        Regex.scan(~r/```elixir\n(.*?)\n```/s, guide)
+        |> Enum.find(fn [_block, code] -> String.contains?(code, "\"amur-logger\"") end)
+
+      log =
+        capture_log(fn ->
+          Code.eval_string(example)
+          Amur.Controller.callback(callback_conn(), %{"provider" => "fake", "code" => "code"})
+        end)
+
+      assert log =~ "provider=:fake result=ok duration="
+
+      assert Enum.any?(
+               :telemetry.list_handlers([:amur, :callback, :stop]),
+               &(&1.id == "amur-logger")
+             )
+    end
+
+    test "the failure counter stays attached after a successful callback" do
+      handler_id = "amur-failure-counter-test"
+
+      :ok =
+        :telemetry.attach(
+          handler_id,
+          [:my_app, :auth, :failure],
+          &__MODULE__.handle_event/4,
+          self()
+        )
+
+      on_exit(fn ->
+        :telemetry.detach(handler_id)
+        :telemetry.detach("amur-failures")
+      end)
+
+      guide = File.read!(Path.expand("../guides/learning/telemetry.md", __DIR__))
+
+      [_block, example] =
+        Regex.scan(~r/```elixir\n(.*?)\n```/s, guide)
+        |> Enum.find(fn [_block, code] -> String.contains?(code, "\"amur-failures\"") end)
+
+      capture_log(fn ->
+        Code.eval_string(example)
+
+        Amur.Controller.callback(callback_conn(), %{"provider" => "fake", "code" => "code"})
+        Amur.Controller.callback(callback_conn(%{}), %{"provider" => "fake"})
+      end)
+
+      assert_receive {:telemetry, [:my_app, :auth, :failure], %{count: 1},
+                      %{reason: :invalid_session_params}}
+
+      refute_receive {:telemetry, [:my_app, :auth, :failure], _measurements, _metadata}
     end
   end
 
@@ -489,6 +592,14 @@ defmodule Amur.TelemetryTest do
     def callback(_config, _params), do: {:error, :callback_failed}
   end
 
+  defmodule KeywordSessionStrategy do
+    def callback(config, _params) do
+      session_params = Keyword.fetch!(config, :session_params)
+      :kept = Keyword.fetch!(session_params, :marker)
+      {:ok, %{user: %{"id" => "user-1"}, token: %{}}}
+    end
+  end
+
   defmodule RaisingStrategy do
     def authorize_url(_config), do: raise("boom")
     def callback(_config, _params), do: raise("boom")
@@ -518,6 +629,13 @@ defmodule Amur.TelemetryTest do
     def strategy, do: Amur.TelemetryTest.FailingStrategy
     def base_config, do: []
     def normalize_user(user), do: user
+  end
+
+  defmodule KeywordSessionProvider do
+    use Amur.Provider
+    def strategy, do: Amur.TelemetryTest.KeywordSessionStrategy
+    def base_config, do: []
+    def normalize_user(user), do: %{uid: user["id"]}
   end
 
   defmodule RaisingProvider do
