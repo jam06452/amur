@@ -51,6 +51,8 @@ defmodule Amur.TelemetryTest do
     :ok
   end
 
+  # Handlers run synchronously, so absence checks can use refute_received
+  # once the controller returns.
   # Forwards every event to the test process so assertions can match on it.
   def handle_event(event, measurements, metadata, pid) do
     send(pid, {:telemetry, event, measurements, metadata})
@@ -140,7 +142,7 @@ defmodule Amur.TelemetryTest do
 
       assert_receive {:success, %{user: %{uid: "user-1"}}}
       assert_receive {:telemetry, [:amur, :callback, :stop], _measurements, %{result: :ok}}
-      refute_receive {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
+      refute_received {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
     end
 
     test "emits start and stop with provider and result on success" do
@@ -267,7 +269,7 @@ defmodule Amur.TelemetryTest do
       end
 
       assert_receive {:telemetry, [:amur, :callback, :stop], _measurements, %{result: :ok}}
-      refute_receive {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
+      refute_received {:telemetry, [:amur, :callback, :exception], _measurements, _metadata}
     end
 
     test "the failure callback runs outside the request span" do
@@ -306,7 +308,7 @@ defmodule Amur.TelemetryTest do
       # The request span completed normally; the callback's crash is not
       # reported as an `[:amur, :request, :exception]`.
       assert_receive {:telemetry, [:amur, :request, :stop], _measurements, %{result: :error}}
-      refute_receive {:telemetry, [:amur, :request, :exception], _measurements, _metadata}
+      refute_received {:telemetry, [:amur, :request, :exception], _measurements, _metadata}
     end
   end
 
@@ -402,7 +404,7 @@ defmodule Amur.TelemetryTest do
       assert_receive {:telemetry, [:my_app, :auth, :failure], %{count: 1},
                       %{reason: :invalid_session_params}}
 
-      refute_receive {:telemetry, [:my_app, :auth, :failure], _measurements, _metadata}
+      refute_received {:telemetry, [:my_app, :auth, :failure], _measurements, _metadata}
     end
   end
 
