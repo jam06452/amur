@@ -113,7 +113,7 @@ defmodule Amur.MixProject do
     [
       {:assent, "~> 0.3"},
       {:plug, ">= 0.0.0"},
-      {:telemetry, "~> 1.0"},
+      {:telemetry, "~> 1.1"},
       {:igniter, "~> 0.8.4", optional: true},
 
       # Test & Dev
