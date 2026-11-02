@@ -12,6 +12,21 @@ defmodule Amur.Providers.Telegram do
 
   Sets no default scope.
 
+  ## Login flow
+
+  Start the flow through Amur's request route. Amur adds an `amur_state` query
+  parameter to `return_to` and stores its expected value in the session.
+
+  Telegram returns the signed login data in the `#tgAuthResult` URL fragment,
+  which browsers do not send to the server. Your `return_to` page must decode
+  that fragment and forward the fields to Amur's callback route as query
+  parameters, preserving `amur_state` and the session cookie. See
+  `Assent.Strategy.Telegram` for the client-side decoding example. A direct
+  widget callback without an Amur request session is rejected.
+
+  Amur verifies the session state before Assent verifies Telegram's signature.
+  Telegram does not issue an OAuth token, so `:on_success` receives `token: nil`.
+
   ## Normalized user
 
   Maps `sub` to `:uid` and `picture` to `:avatar`. For `:name` it joins

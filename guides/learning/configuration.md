@@ -91,7 +91,8 @@ end
 
 The token map's keys depend on the provider's flow. OAuth 2.0 providers use
 `token["access_token"]`; OAuth 1.0 (Twitter) uses `token["oauth_token"]` and
-`token["oauth_token_secret"]`.
+`token["oauth_token_secret"]`. Telegram returns `token: nil` because it
+authenticates signed login data without issuing an OAuth token.
 
 ## `:on_failure`
 
@@ -130,6 +131,10 @@ Both callbacks accept an MFA tuple instead of a function capture:
 config :amur,
   on_success: {MyAppWeb.AuthController, :on_success, []}
 ```
+
+Amur passes the connection and result first, followed by any extra arguments in
+the tuple's list. For example, `{MyAppWeb.AuthController, :on_success, [:admin]}`
+calls `on_success(conn, context, :admin)`.
 
 A function capture is usually clearer and is what the Igniter installer
 generates.

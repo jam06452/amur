@@ -56,7 +56,7 @@ The flow has four steps:
    handshake parameters (the `state`, PKCE verifier, …) in the session, and
    redirects the user to the provider.
 3. The provider authenticates the user and redirects back to
-   `GET /auth/:provider/callback`.
+   `GET` or `POST /auth/:provider/callback`.
 4. `Amur.Controller.callback/2` consumes the session parameters, exchanges the
    callback for a token, normalizes the provider's user response, and invokes
    your `:on_success` callback.

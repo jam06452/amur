@@ -26,6 +26,8 @@ defmodule Amur.Providers.Apple do
   > Apple only includes `given_name`/`family_name` on the very first
   > authorization for a given app. On subsequent sign-ins `:name` will be
   > `" "` (an empty join), so persist the name from the first callback.
+  > The name is unverified browser input. Set `include_unverified_name: false`
+  > in the provider credentials to omit it; identity claims come from the signed token.
   """
 
   use Amur.Provider
@@ -37,6 +39,7 @@ defmodule Amur.Providers.Apple do
   def base_config do
     [
       base_url: "https://appleid.apple.com",
+      include_unverified_name: true,
       authorization_params: [scope: "email", response_mode: "form_post"],
       client_authentication_method: "client_secret_post"
     ]

@@ -8,7 +8,7 @@ defmodule Amur.Router do
 
     * `GET /auth` - the sign-in page listing the configured providers
     * `GET /auth/:provider` - start the OAuth flow
-    * `GET /auth/:provider/callback` - handle the provider callback
+    * `GET` or `POST /auth/:provider/callback` - handle the provider callback
 
   The sign-in page and its assets are served from Amur's own `priv/` directory,
   so the same routes work in Phoenix and in a standalone `Plug.Router` without
@@ -29,8 +29,9 @@ defmodule Amur.Router do
   Fetches request state and dispatches the supported OAuth routes.
 
   Query parameters and the session are fetched before dispatch so the
-  controller can build authorization requests and validate callbacks. Unknown
-  methods or paths pass through unchanged.
+  controller can build authorization requests and validate callbacks. Form POST
+  callbacks are parsed here when the host pipeline has not parsed them already.
+  Unknown methods or paths pass through unchanged.
   """
   def call(conn, _opts) do
     conn =
@@ -45,7 +46,12 @@ defmodule Amur.Router do
       {"GET", [segment]} ->
         dispatch_segment(conn, segment)
 
-      {"GET", [provider, "callback"]} ->
+      {method, [provider, "callback"]} when method in ["GET", "POST"] ->
+        conn =
+          if method == "POST",
+            do: Plug.Parsers.call(conn, Plug.Parsers.init(parsers: [:urlencoded])),
+            else: conn
+
         Amur.Controller.callback(conn, Map.put(conn.params, "provider", provider))
 
       _ ->

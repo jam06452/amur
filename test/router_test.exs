@@ -51,6 +51,45 @@ defmodule Amur.RouterTest do
     assert Plug.Conn.get_session(conn, :amur_session_params) == nil
   end
 
+  test "POST callback route parses form data and uses the provider from the path" do
+    conn =
+      Plug.Test.conn(
+        :post,
+        "/auth/router/callback?source=apple",
+        "code=abc&state=router-state&provider=other"
+      )
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Test.init_test_session(%{amur_session_params: %{state: "router-state"}})
+
+    conn = Amur.Router.call(%{conn | path_info: ["router", "callback"]}, [])
+
+    assert_receive {:callback_params,
+                    %{
+                      "provider" => "router",
+                      "code" => "abc",
+                      "state" => "router-state",
+                      "source" => "apple"
+                    }}
+
+    assert conn.body_params["code"] == "abc"
+    assert Plug.Conn.get_session(conn, :amur_session_params) == nil
+  end
+
+  test "POST callback preserves form data already parsed by the host pipeline" do
+    conn =
+      Plug.Test.conn(:post, "/auth/router/callback", "code=abc&state=router-state")
+      |> Plug.Conn.put_req_header("content-type", "application/x-www-form-urlencoded")
+      |> Plug.Parsers.call(Plug.Parsers.init(parsers: [:urlencoded]))
+      |> Plug.Test.init_test_session(%{amur_session_params: %{state: "router-state"}})
+
+    conn = Amur.Router.call(%{conn | path_info: ["router", "callback"]}, [])
+
+    assert_receive {:callback_params,
+                    %{"provider" => "router", "code" => "abc", "state" => "router-state"}}
+
+    assert Plug.Conn.get_session(conn, :amur_session_params) == nil
+  end
+
   test "unsupported method and path pass through unchanged" do
     post =
       Plug.Test.conn(:post, "/auth/router")

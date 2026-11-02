@@ -11,7 +11,7 @@ happens between them.
 |---|---|
 | `GET /auth` | Sign-in page listing the configured providers |
 | `GET /auth/:provider` | Initiates the OAuth flow |
-| `GET /auth/:provider/callback` | Handles the provider callback |
+| `GET` or `POST /auth/:provider/callback` | Handles the provider callback |
 
 Mounted with `forward "/auth", Amur.Router`, the full paths are
 `/auth`, `/auth/:provider`, and `/auth/:provider/callback`. The sign-in page and
@@ -42,8 +42,28 @@ If any step fails, your `:on_failure` callback is invoked instead.
 The user signs in at the provider and is redirected back to
 `GET /auth/:provider/callback`. Most providers send the result as query
 parameters; Apple and Azure AD use `response_mode: "form_post"` and send it as a
-`POST` body. Amur merges both into `conn.params` before dispatching, so the
-callback works either way.
+`POST` body. Amur parses form callbacks when the host pipeline has not already
+done so and merges the body and query parameters into `conn.params`.
+
+### Form POST callbacks
+
+For form POST callbacks, the host application's session cookie must be sent on
+the cross-site POST (typically
+[`SameSite=None; Secure`](https://developers.google.com/search/blog/2020/01/get-ready-for-new-samesitenone-secure)).
+Use a [separate pipeline](https://plug.hexdocs.pm/Plug.CSRFProtection.html#module-disabling)
+for the provider callback route that fetches the session without application
+form CSRF protection: Assent validates the OAuth state there. Keep CSRF
+protection enabled for the application's other routes.
+
+### Telegram callbacks
+
+Telegram uses signed login data instead of an OAuth code. Start its flow through
+`GET /auth/telegram` so Amur can bind it to the browser session. Amur adds an
+`amur_state` query parameter to the configured `:return_to` URL. The application's
+return page must decode Telegram's `#tgAuthResult` fragment and forward the
+signed fields to `/auth/telegram/callback`, preserving `amur_state` and the return
+URL's existing query parameters. Amur checks the state before Assent verifies
+the signature. See `Amur.Providers.Telegram` for the required configuration.
 
 ## Step 3 — Completing the flow
 
@@ -51,8 +71,11 @@ callback works either way.
 
 1. Reads `:amur_session_params` from the session and **immediately deletes it**,
    so the handshake state is single-use.
-2. Validates that the session parameters contain a non-empty `state`. Missing,
-   empty, or malformed state returns `{:error, :invalid_session_params}`.
+2. Validates a non-empty string `state` for OAuth 2.0 and Telegram, or a non-empty
+   request token secret for OAuth 1.0 (Twitter). Missing, empty, or malformed handshake
+   data returns `{:error, :invalid_session_params}`. Keyword session parameters
+   are converted to a map for Assent's OAuth 2.0, OIDC, and Telegram strategies;
+   custom strategies retain their original session representation.
 3. Passes the session parameters and the callback parameters to the provider's
    Assent strategy, which exchanges the code for a token and fetches the user.
 4. Normalizes the provider's user response with the provider module's
@@ -146,6 +169,7 @@ The token map's keys depend on the provider's flow:
 - OAuth 2.0 providers use `token["access_token"]`.
 - OAuth 1.0 (Twitter) uses `token["oauth_token"]` and
   `token["oauth_token_secret"]`.
+- Telegram returns `nil`, since its signed login response has no OAuth token.
 
 Amur does not store or refresh tokens. Persisting them is your application's
 responsibility.
