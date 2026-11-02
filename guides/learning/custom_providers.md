@@ -16,9 +16,12 @@ defmodule MyApp.Auth.CustomProvider do
   def base_config do
     [
       base_url: "https://api.example.com",
-      authorization_endpoint: "/oauth/authorize",
-      token_endpoint: "/oauth/token",
-      user_endpoint: "/user"
+      client_id: System.fetch_env!("CUSTOM_CLIENT_ID"),
+      client_secret: System.fetch_env!("CUSTOM_CLIENT_SECRET"),
+      auth_method: :client_secret_post,
+      authorize_url: "/oauth/authorize",
+      token_url: "/oauth/token",
+      user_url: "/user"
     ]
   end
 
@@ -54,20 +57,21 @@ provider needs something different.
 
 ### `base_config/0`
 
-Returns the provider's default configuration as a keyword list. This is merged
-with the credentials from your `config :amur` (your values win), and Amur adds
-`:strategy` and `:redirect_uri` on top.
+Returns the provider's configuration as a keyword list. For a custom module,
+read credentials here, as in the example above. Built-in providers merge their
+defaults with the credential list from `config :amur`. Amur adds `:strategy`
+and a default `:redirect_uri`.
 
 Typical keys for an OAuth 2.0 provider:
 
 | Key | Description |
 |---|---|
 | `base_url` | Origin the endpoint paths are relative to. |
-| `authorization_endpoint` / `authorize_url` | Where the user is sent to authorize. |
-| `token_endpoint` / `token_url` | Where the code is exchanged for a token. |
-| `user_endpoint` / `user_url` | Where the user profile is fetched. |
+| `authorize_url` | Where the user is sent to authorize. |
+| `token_url` | Where the code is exchanged for a token. |
+| `user_url` | Where the user profile is fetched. |
 | `authorization_params` | Extra query parameters, including `scope`. |
-| `client_authentication_method` | How the client authenticates at the token endpoint. |
+| `auth_method` | How an OAuth 2.0 client authenticates at the token endpoint (for example, `:client_secret_post`). OIDC strategies use `client_authentication_method` instead. |
 
 The exact key names depend on the Assent strategy. Reading a built-in provider
 module's `base_config/0` is the best reference — see
@@ -163,11 +167,13 @@ defmodule MyApp.Auth.Acme do
   def base_config do
     [
       base_url: "https://auth.acme.test",
-      authorization_endpoint: "/authorize",
-      token_endpoint: "/token",
-      user_endpoint: "/api/me",
+      client_id: System.fetch_env!("ACME_CLIENT_ID"),
+      client_secret: System.fetch_env!("ACME_CLIENT_SECRET"),
+      authorize_url: "/authorize",
+      token_url: "/token",
+      user_url: "/api/me",
       authorization_params: [scope: "openid email profile"],
-      client_authentication_method: "client_secret_post"
+      auth_method: :client_secret_post
     ]
   end
 
@@ -205,10 +211,10 @@ The user then signs in at `/auth/acme`, and `:on_success` receives a user with
 test "normalizes an Acme user" do
   raw = %{"user_id" => "1", "email_address" => "a@b.test", "plan" => "pro"}
 
-  assert MyApp.Auth.Acme.normalize_user(raw) == %{
+  assert %{
            uid: "1",
            email: "a@b.test",
            plan: "pro"
-         }
+         } = MyApp.Auth.Acme.normalize_user(raw)
 end
 ```

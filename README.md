@@ -120,9 +120,12 @@ defmodule MyApp.Auth.CustomProvider do
   def base_config do
     [
       base_url: "https://api.example.com",
-      authorization_endpoint: "/oauth/authorize",
-      token_endpoint: "/oauth/token",
-      user_endpoint: "/user"
+      client_id: System.fetch_env!("CUSTOM_CLIENT_ID"),
+      client_secret: System.fetch_env!("CUSTOM_CLIENT_SECRET"),
+      auth_method: :client_secret_post,
+      authorize_url: "/oauth/authorize",
+      token_url: "/oauth/token",
+      user_url: "/user"
     ]
   end
 
@@ -209,8 +212,9 @@ The router exposes three endpoints:
 
 | Endpoint | Description |
 |---|---|
+| `GET /auth` | Sign-in page listing configured providers |
 | `GET /auth/:provider` | Initiates the OAuth flow |
-| `GET /auth/:provider/callback` | Handles the provider callback |
+| `GET` or `POST /auth/:provider/callback` | Handles the provider callback |
 
 Amur stores the OAuth handshake params (the `state`, PKCE verifier, ...) in
 the session for the duration of the flow and clears them automatically once
@@ -279,7 +283,9 @@ end
 
 The token map's keys depend on the provider's flow: OAuth 2.0 providers use
 `token["access_token"]`, while OAuth 1.0 (Twitter) uses `token["oauth_token"]`
-and `token["oauth_token_secret"]`.
+and `token["oauth_token_secret"]`. Telegram authenticates signed login data and
+returns `token: nil`; its return page must forward the login data and Amur's
+state value to the callback, as described in `Amur.Providers.Telegram`.
 
 ## Changelog
 

@@ -12,9 +12,12 @@ defmodule Amur.Provider do
         def base_config do
           [
             base_url: "https://discord.com/api",
-            authorization_endpoint: "/oauth2/authorize",
-            token_endpoint: "/oauth2/token",
-            user_endpoint: "/users/@me"
+            client_id: System.fetch_env!("DISCORD_CLIENT_ID"),
+            client_secret: System.fetch_env!("DISCORD_CLIENT_SECRET"),
+            auth_method: :client_secret_post,
+            authorize_url: "/oauth2/authorize",
+            token_url: "/oauth2/token",
+            user_url: "/users/@me"
           ]
         end
 
