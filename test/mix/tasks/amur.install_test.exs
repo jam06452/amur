@@ -65,9 +65,9 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "System.get_env(\"BASE_URL\") || \"http://localhost:4000\""
     refute runtime =~ "Endpoint.url()"
     refute runtime =~ "AMUR_DOTENV_LOADER"
-    assert runtime =~ "Mix.env() != :test"
+    assert runtime =~ "config_env() != :test"
     assert runtime =~ "System.put_env(key, val)"
-    assert runtime =~ ~r/import Config\n\nif Mix\.env\(\) != :test/
+    assert runtime =~ ~r/import Config\n\nif config_env\(\) != :test/
     assert {:ok, _} = Code.string_to_quoted(runtime)
   end
 
@@ -91,10 +91,95 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     for provider <- Amur.Config.built_in_providers() do
       assert runtime =~ "#{provider}: ["
-      env_prefix = provider |> Atom.to_string() |> String.upcase()
-      assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_ID\")"
-      assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_SECRET\")"
+
+      unless provider in [:apple, :telegram, :zitadel] do
+        env_prefix = provider |> Atom.to_string() |> String.upcase()
+        assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_ID\")"
+        assert runtime =~ "System.fetch_env!(\"#{env_prefix}_CLIENT_SECRET\")"
+      end
     end
+  end
+
+  @tag :tmp_dir
+  test "generated runtime config evaluates without Mix running", %{tmp_dir: tmp_dir} do
+    igniter = apply_install(["--app", "sample", "--yes"])
+    runtime_path = Path.join(tmp_dir, "runtime.exs")
+    File.write!(runtime_path, igniter.assigns[:test_files]["config/runtime.exs"])
+
+    {output, status} =
+      System.cmd(
+        System.find_executable("elixir"),
+        ["-e", "Config.Reader.read!(hd(System.argv()), env: :prod)", runtime_path],
+        cd: tmp_dir,
+        env: [{"GITHUB_CLIENT_ID", "client"}, {"GITHUB_CLIENT_SECRET", "secret"}],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+  end
+
+  test "the installer compiles without its optional Igniter dependency" do
+    source = Path.expand("../../../lib/mix/tasks/amur.install.ex", __DIR__)
+
+    script = """
+    false = Code.ensure_loaded?(Igniter)
+    Code.compile_file(hd(System.argv()))
+    try do
+      Mix.Tasks.Amur.Install.run([])
+    rescue
+      e in Mix.Error -> IO.puts(Exception.message(e))
+    end
+    """
+
+    {output, status} =
+      System.cmd(System.find_executable("elixir"), ["-e", script, source], stderr_to_stdout: true)
+
+    assert status == 0, output
+    assert output =~ "requires Igniter"
+  end
+
+  @tag :tmp_dir
+  test "generates the credentials required by nonstandard providers", %{tmp_dir: tmp_dir} do
+    providers = "twitter,telegram,apple,auth0,zitadel"
+
+    {:ok, igniter, %{notices: notices}} =
+      apply_install_with_messages(["--app", "sample", "--provider", providers, "--yes"], %{})
+
+    runtime_path = Path.join(tmp_dir, "runtime.exs")
+    File.write!(runtime_path, igniter.assigns[:test_files]["config/runtime.exs"])
+
+    # Evaluate the generated configuration so incorrect keyword keys, missing
+    # environment variables, or invalid generated code fail together.
+    env_keys =
+      ~w(TWITTER_CLIENT_ID TWITTER_CLIENT_SECRET TELEGRAM_BOT_TOKEN TELEGRAM_ORIGIN
+      TELEGRAM_RETURN_TO APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_PRIVATE_KEY_ID APPLE_PRIVATE_KEY_PATH
+      AUTH0_CLIENT_ID AUTH0_CLIENT_SECRET AUTH0_BASE_URL ZITADEL_CLIENT_ID ZITADEL_BASE_URL ZITADEL_RESOURCE_ID)
+
+    script = """
+    providers = Config.Reader.read!(hd(System.argv()), env: :test)[:amur][:providers]
+    "TWITTER_CLIENT_ID" = providers[:twitter][:consumer_key]
+    "TWITTER_CLIENT_SECRET" = providers[:twitter][:consumer_secret]
+    "TELEGRAM_BOT_TOKEN" = providers[:telegram][:bot_token]
+    "TELEGRAM_ORIGIN" = providers[:telegram][:origin]
+    "TELEGRAM_RETURN_TO" = providers[:telegram][:return_to]
+    "APPLE_TEAM_ID" = providers[:apple][:team_id]
+    "APPLE_PRIVATE_KEY_ID" = providers[:apple][:private_key_id]
+    "APPLE_PRIVATE_KEY_PATH" = providers[:apple][:private_key_path]
+    "AUTH0_BASE_URL" = providers[:auth0][:base_url]
+    "ZITADEL_BASE_URL" = providers[:zitadel][:base_url]
+    "ZITADEL_RESOURCE_ID" = providers[:zitadel][:resource_id]
+    nil = providers[:zitadel][:client_secret]
+    """
+
+    {output, status} =
+      System.cmd(System.find_executable("elixir"), ["-e", script, runtime_path],
+        env: Enum.map(env_keys, &{&1, &1}),
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+    for key <- env_keys, do: assert(Enum.any?(notices, &String.contains?(&1, key)))
+    assert Enum.any?(notices, &String.contains?(&1, "preserving amur_state"))
   end
 
   test "--provider and --all are mutually exclusive" do
@@ -111,6 +196,52 @@ defmodule Mix.Tasks.Amur.InstallTest do
     assert runtime =~ "google: ["
     assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
     assert runtime =~ "System.fetch_env!(\"GOOGLE_CLIENT_ID\")"
+  end
+
+  test "adding a provider preserves existing credentials, base URL and callbacks" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--provider", "github", "--yes"],
+        %{
+          "config/runtime.exs" => """
+          import Config
+
+          config :amur,
+            base_url: "https://example.com",
+            providers: [
+              google: [client_id: "existing-google", client_secret: "existing-secret"],
+              github: [client_id: "existing-github", client_secret: "existing-secret"]
+            ],
+            on_success: &Sample.handle_success/2,
+            on_failure: &Sample.handle_failure/2
+          """
+        }
+      )
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ "existing-google"
+    assert runtime =~ "existing-github"
+    assert runtime =~ ~s|base_url: "https://example.com"|
+    assert runtime =~ "Sample.handle_success/2"
+    assert runtime =~ "Sample.handle_failure/2"
+  end
+
+  test "adds a provider without dropping providers omitted from the command" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--provider", "github", "--yes"],
+        %{
+          "config/runtime.exs" => """
+          import Config
+          config :amur, providers: [google: [client_id: "existing", client_secret: "existing"]]
+          """
+        }
+      )
+
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    assert runtime =~ "google: ["
+    assert runtime =~ "github: ["
+    assert runtime =~ "System.fetch_env!(\"GITHUB_CLIENT_ID\")"
   end
 
   test "does not require a browser pipeline" do
@@ -155,6 +286,27 @@ defmodule Mix.Tasks.Amur.InstallTest do
     igniter = apply_install(["--app", "sample", "--no-router", "--yes"])
 
     refute igniter.assigns[:test_files]["lib/sample_web/router.ex"] =~ "forward"
+  end
+
+  test "does not ask to remount an existing router when generation is skipped" do
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--page", "--no-router", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+
+            scope "/auth", alias: false do
+              forward "/", Amur.Router
+            end
+          end
+          """
+        }
+      )
+
+    assert Enum.any?(notices, &String.contains?(&1, "Open the sign-in page at"))
+    refute Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
   end
 
   test "does not point at an unmounted route when --no-router is passed" do
@@ -212,6 +364,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
       apply_install(
         ["--app", "sample", "--yes"],
         %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
           "lib/sample/router.ex" => """
           defmodule Sample.Router do
             use Plug.Router
@@ -268,7 +421,7 @@ defmodule Mix.Tasks.Amur.InstallTest do
     end
   end
 
-  test "does not add a duplicate dotenv loader" do
+  test "upgrades an existing dotenv guard without duplicating or replacing the loader" do
     igniter =
       apply_install(
         ["--app", "sample", "--yes"],
@@ -292,6 +445,9 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     runtime = igniter.assigns[:test_files]["config/runtime.exs"]
     assert length(Regex.scan(~r/File\.exists\?\("\.env"\)/, runtime)) == 1
+    assert runtime =~ "config_env() != :test"
+    refute runtime =~ "Mix.env()"
+    refute runtime =~ "Enum.reject"
   end
 
   test "adds the dotenv loader before a runtime file without Config import" do
@@ -370,6 +526,236 @@ defmodule Mix.Tasks.Amur.InstallTest do
 
     router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
     assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
+
+  test "does not mistake a quoted mount in another module for the selected router" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+          end
+
+          defmodule SampleWeb.RouterHelpers do
+            defmacro auth_routes do
+              quote do
+                scope "/auth", alias: false do
+                  forward "/", Amur.Router
+                end
+              end
+            end
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 2
+  end
+
+  test "does not mistake a prefixed auth scope for the root mount" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+
+            scope "/admin", alias: false do
+              scope "/auth", alias: false do
+                forward "/", Amur.Router
+              end
+            end
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 2
+  end
+
+  test "resolves aliases at the forward instead of declarations later in the module" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+            alias Amur.Router, as: AuthRouter
+
+            scope "/auth", alias: false do
+              forward "/", AuthRouter
+            end
+
+            alias Other.Router, as: AuthRouter
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",/, router)) == 1
+  end
+
+  test "does not mistake Phoenix controller aliasing for an Amur mount" do
+    igniter =
+      apply_install(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+
+            scope "/auth", SampleWeb do
+              forward "/", Amur.Router
+            end
+          end
+          """
+        }
+      )
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 2
+    assert router =~ ~s|scope "/auth", alias: false do|
+  end
+
+  test "recognizes a forward that disables Phoenix aliasing on the route itself" do
+    igniter =
+      apply_install(["--app", "sample", "--yes"], %{
+        "lib/sample_web/router.ex" => """
+        defmodule SampleWeb.Router do
+          use Phoenix.Router
+
+          scope "/auth", SampleWeb do
+            forward "/", Amur.Router, [], alias: false
+          end
+        end
+        """
+      })
+
+    router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert length(Regex.scan(~r/forward\(?\s*"\/",\s*Amur\.Router/, router)) == 1
+  end
+
+  @tag :tmp_dir
+  test "an existing dotenv loader runs before newly generated credentials", %{tmp_dir: tmp_dir} do
+    igniter =
+      apply_install(["--app", "sample", "--yes"], %{
+        "config/runtime.exs" => """
+        import Config
+
+        if Mix.env() != :test and File.exists?(".env") do
+          ".env"
+          |> File.read!()
+          |> String.split("\\n", trim: true)
+          |> Enum.each(fn line ->
+            [key, val] = String.split(line, "=", parts: 2)
+            System.put_env(key, val)
+          end)
+        end
+        """
+      })
+
+    runtime_path = Path.join(tmp_dir, "runtime.exs")
+    File.write!(runtime_path, igniter.assigns[:test_files]["config/runtime.exs"])
+    File.write!(Path.join(tmp_dir, ".env"), "GITHUB_CLIENT_ID=id\nGITHUB_CLIENT_SECRET=secret\n")
+
+    script = """
+    providers = Config.Reader.read!(hd(System.argv()), env: :prod)[:amur][:providers]
+    "id" = providers[:github][:client_id]
+    "secret" = providers[:github][:client_secret]
+    """
+
+    {output, status} =
+      System.cmd(System.find_executable("elixir"), ["-e", script, runtime_path],
+        cd: tmp_dir,
+        env: [{"GITHUB_CLIENT_ID", nil}, {"GITHUB_CLIENT_SECRET", nil}],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+  end
+
+  @tag :tmp_dir
+  test "a nested dotenv loader does not scope generated defaults to its environment", %{
+    tmp_dir: tmp_dir
+  } do
+    igniter =
+      apply_install(["--app", "sample", "--yes"], %{
+        "config/runtime.exs" => """
+        import Config
+
+        if config_env() == :prod do
+          if File.exists?(".env") do
+            Enum.each([], fn {key, val} -> System.put_env(key, val) end)
+          end
+        end
+
+        config :amur, providers: [github: [client_id: "existing", client_secret: "existing"]]
+        """
+      })
+
+    runtime_path = Path.join(tmp_dir, "runtime.exs")
+    File.write!(runtime_path, igniter.assigns[:test_files]["config/runtime.exs"])
+    config = Config.Reader.read!(runtime_path, env: :test)[:amur]
+
+    assert is_binary(config[:base_url])
+    assert is_function(config[:on_success], 2)
+    assert config[:providers][:github][:client_id] == "existing"
+  end
+
+  test "does not treat a dynamic scope path or alias as a root Amur mount" do
+    for scope <- ["path: @prefix, alias: false", "path: \"/\", alias: @web_module"] do
+      igniter =
+        apply_install(["--app", "sample", "--yes"], %{
+          "lib/sample_web/router.ex" => """
+          defmodule SampleWeb.Router do
+            use Phoenix.Router
+            @prefix "/admin"
+            @web_module SampleWeb
+            scope #{scope} do
+              forward "/auth", Amur.Router
+            end
+          end
+          """
+        })
+
+      router = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+      assert router =~ "scope \"/auth\", alias: false"
+      assert router =~ "forward(\"/\", Amur.Router)"
+    end
+  end
+
+  test "warns when an aliased standalone Plug router cannot be located" do
+    {:ok, _igniter, %{warnings: warnings, notices: notices}} =
+      apply_install_with_messages(
+        ["--app", "sample", "--yes"],
+        %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Router do\nend\n",
+          "lib/weird/thing.ex" => """
+          alias Sample.Router
+
+          defmodule Router do
+            use Plug.Router
+            plug :match
+            plug :dispatch
+          end
+          """
+        }
+      )
+
+    assert Enum.any?(
+             warnings,
+             &String.contains?(&1, "Could not find the Plug router Sample.Router")
+           )
+
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router in your router"))
+    refute Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at"))
   end
 
   test "adds the /auth mount when Amur is forwarded at a different path" do
@@ -451,6 +837,28 @@ defmodule Mix.Tasks.Amur.InstallTest do
     refute runtime =~ "System.get_env(\"BASE_URL\")"
     refute runtime =~ "File.exists?(\".env\")"
     refute runtime =~ "google: ["
+  end
+
+  test "page-only next steps preserve the project's provider and callback choices" do
+    {:ok, _igniter, %{notices: notices}} =
+      apply_install_with_messages(
+        ["--page", "--no-router", "--no-controller", "--app", "sample", "--yes"],
+        %{
+          "config/runtime.exs" => """
+          import Config
+
+          config :amur,
+            providers: [google: [client_id: "existing", client_secret: "existing"]],
+            on_success: &Sample.handle_success/2,
+            on_failure: &Sample.handle_failure/2
+          """
+        }
+      )
+
+    refute Enum.any?(notices, &String.contains?(&1, "GITHUB_CLIENT"))
+    refute Enum.any?(notices, &String.contains?(&1, "AuthController"))
+    refute Enum.any?(notices, &String.contains?(&1, "/auth/github"))
+    assert Enum.any?(notices, &String.contains?(&1, "sign-in page"))
   end
 
   test "adds the page config to a project that already has Amur installed" do
@@ -1555,5 +1963,107 @@ defmodule Mix.Tasks.Amur.InstallTest do
            )
 
     assert igniter.assigns[:test_files]["lib/sample_web/router_test.exs"] =~ "use Phoenix.Router"
+  end
+
+  test "--no-router reports whether a Plug router already mounts Amur" do
+    for mounted? <- [true, false] do
+      forward = if mounted?, do: ~s(forward "/auth", to: Amur.Router), else: ""
+
+      source = """
+      defmodule Sample.Router do
+        use Plug.Router
+        plug :match
+        #{forward}
+        plug :dispatch
+      end
+      """
+
+      {:ok, igniter, %{notices: notices}} =
+        apply_install_with_messages(["--app", "sample", "--no-router", "--yes"], %{
+          "lib/sample_web/router.ex" => "defmodule SampleWeb.Placeholder do
+end",
+          "lib/sample/router.ex" => source
+        })
+
+      result = igniter.assigns[:test_files]["lib/sample/router.ex"]
+      assert result =~ "forward" == mounted?
+      assert Enum.any?(notices, &String.contains?(&1, "Initiate an OAuth flow at")) == mounted?
+      assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router")) == not mounted?
+    end
+  end
+
+  test "recognizes pathless scopes and explicitly nil scope aliases" do
+    for scope <- ["alias: false", ~s("/auth", alias: nil)] do
+      path = if scope == "alias: false", do: "/auth", else: "/"
+
+      source = """
+      defmodule SampleWeb.Router do
+        use Phoenix.Router
+        scope #{scope} do
+          forward "#{path}", Amur.Router
+        end
+      end
+      """
+
+      igniter =
+        apply_install(["--app", "sample", "--yes"], %{"lib/sample_web/router.ex" => source})
+
+      result = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+      assert length(Regex.scan(~r/forward/, result)) == 1
+    end
+  end
+
+  test "a scope without settings does not count as a known mount" do
+    source = """
+    defmodule SampleWeb.Router do
+      use Phoenix.Router
+      scope do
+        forward "/auth", Amur.Router
+      end
+    end
+    """
+
+    igniter = apply_install(["--app", "sample", "--yes"], %{"lib/sample_web/router.ex" => source})
+    result = igniter.assigns[:test_files]["lib/sample_web/router.ex"]
+    assert result =~ ~s(scope "/auth", alias: false)
+  end
+
+  test "upgrading a dotenv guard preserves unrelated runtime conditions" do
+    source = """
+    import Config
+
+    if Mix.env() != :test and File.exists?(".env") do
+      Enum.each([], fn {key, val} -> System.put_env(key, val) end)
+    end
+
+    if config_env() == :prod do
+      config :sample, :unrelated, true
+    end
+    """
+
+    igniter = apply_install(["--app", "sample", "--yes"], %{"config/runtime.exs" => source})
+    runtime = igniter.assigns[:test_files]["config/runtime.exs"]
+    refute runtime =~ "Mix.env()"
+    assert runtime =~ "if config_env() == :prod do"
+    assert runtime =~ "config :sample, :unrelated, true"
+  end
+
+  test "--no-router tolerates a router placeholder without a do block" do
+    source = """
+    defmodule SampleWeb.Router, [use(Phoenix.Router)]
+    """
+
+    {:ok, igniter, %{notices: notices}} =
+      apply_install_with_messages(["--app", "sample", "--no-router", "--yes"], %{
+        "lib/sample_web/router.ex" => source,
+        "test/router_test.exs" => """
+        defmodule SampleWeb.Router do
+          use Phoenix.Router
+        end
+        """
+      })
+
+    refute igniter.assigns[:test_files]["lib/sample_web/router.ex"] =~ "forward"
+    assert Enum.any?(notices, &String.contains?(&1, "Mount Amur.Router"))
   end
 end

@@ -79,7 +79,21 @@ The variable prefix is the uppercased provider name, so `google` becomes
 `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and `digital_ocean` becomes
 `DIGITAL_OCEAN_CLIENT_ID` / `DIGITAL_OCEAN_CLIENT_SECRET`.
 
-That's it for basic setup of Amur.
+Some providers require different configuration. The installer generates these
+keys and lists their environment variables in its next steps:
+
+| Provider | Environment variables |
+|---|---|
+| Twitter | `TWITTER_CLIENT_ID` and `TWITTER_CLIENT_SECRET`, mapped to `consumer_key` and `consumer_secret` |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ORIGIN`, `TELEGRAM_RETURN_TO` |
+| Apple | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_PRIVATE_KEY_ID`, `APPLE_PRIVATE_KEY_PATH` |
+| Auth0 | `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_BASE_URL` |
+| Zitadel | `ZITADEL_CLIENT_ID`, `ZITADEL_BASE_URL`, `ZITADEL_RESOURCE_ID` |
+
+Telegram also needs an application-owned return page to forward its login
+fragment to Amur; see `Amur.Providers.Telegram`. For Apple and other providers
+using POST callbacks, configure the host session and callback pipeline as
+described in [OAuth Flow](oauth_flow.html#form-post-callbacks).
 
 ## Adding the sign-in page to an existing project
 
