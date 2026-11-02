@@ -150,6 +150,25 @@ defmodule Amur.ConfigTest do
     assert Amur.Config.configured_providers() == [:github]
   end
 
+  test "boolean provider values are rejected as modules" do
+    for value <- [true, false] do
+      Application.put_env(:amur, :providers, github: value, foo: value)
+
+      assert Amur.Config.resolvable?(:foo) == false
+      assert {:error, :unknown_provider} = Amur.Config.resolve(:foo)
+      assert {:ok, {Amur.Providers.GitHub, _config}} = Amur.Config.resolve(:github)
+      assert Amur.Config.configured_providers() == [:github]
+    end
+  end
+
+  test "a provider named false can still use a custom module" do
+    Application.put_env(:amur, :providers, [{false, Amur.ConfigTest.CustomProvider}])
+
+    assert Amur.Config.resolvable?(false)
+    assert {:ok, {Amur.ConfigTest.CustomProvider, _config}} = Amur.Config.resolve("false")
+    assert Amur.Config.configured_providers() == [false]
+  end
+
   test "resolvable?/1 agrees with resolve/1 for every configured shape" do
     Application.put_env(:amur, :providers,
       github: [client_id: "id"],
@@ -165,5 +184,13 @@ defmodule Amur.ConfigTest do
       assert resolvable? == resolves?,
              "resolvable?(#{inspect(name)}) = #{resolvable?} but resolve/1 resolved? = #{resolves?}"
     end
+  end
+
+  test "nil and non-atom provider names are not resolvable" do
+    for provider <- [nil, "github", [], %{}] do
+      refute Amur.Config.resolvable?(provider)
+    end
+
+    assert Amur.Config.resolve(nil) == {:error, :unknown_provider}
   end
 end

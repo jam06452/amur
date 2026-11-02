@@ -73,7 +73,7 @@ defmodule Amur.Config do
   # about which names resolve. In particular a `providers: [foo: nil]` entry is
   # reported as unresolvable here and as `{:error, :unknown_provider}` there,
   # rather than being labelled as a provider and then crashing on
-  # `nil.base_config/0`.
+  # `nil.base_config/0`. Boolean values are rejected in the same way.
   #
   # Public only because `Amur.Controller` calls it; not part of the documented
   # API (the module is `@moduledoc false`).
@@ -118,13 +118,13 @@ defmodule Amur.Config do
   #
   # A configured value that is a module wins, so a custom provider overrides a
   # built-in of the same name. Any other configured value (credentials, or a
-  # malformed one) falls back to the built-in of that name. `nil` is an atom but
-  # not a module, so it is rejected explicitly: otherwise `resolve/1` would call
-  # `nil.base_config/0` and crash, and `resolvable?/1` would claim the name is
-  # usable. Both callers share this function, so they cannot drift apart.
+  # malformed one) falls back to the built-in of that name. `nil` and booleans
+  # are atoms but not module values, so they are rejected explicitly. Both
+  # callers share this function, so they cannot drift apart. Other module atoms
+  # are kept without loading provider code before the telemetry span starts.
   defp provider_module(provider) when is_atom(provider) and not is_nil(provider) do
     case Keyword.fetch(Application.get_env(:amur, :providers, []), provider) do
-      {:ok, module} when is_atom(module) and not is_nil(module) ->
+      {:ok, module} when is_atom(module) and module not in [nil, true, false] ->
         {:ok, module}
 
       {:ok, _credentials} ->
